@@ -84,6 +84,20 @@ export class CiStack extends cdk.Stack {
       );
     }
 
+    // One deliberate, narrow exception to "no direct permissions beyond
+    // assume-role" above: `deploy-prod`'s seed step (data/seed/src/run.ts)
+    // writes reference content (breeds, curated hazards, plant/food data)
+    // directly via the SDK, not through `cdk deploy` — so it needs its own
+    // grant rather than riding the bootstrap roles' CloudFormation-exec
+    // permissions. Scoped to exactly the one table and the one action the
+    // script performs (BatchWriteItem — it never reads or deletes).
+    this.deployRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['dynamodb:BatchWriteItem'],
+        resources: [`arn:aws:dynamodb:${AWS_REGION}:${this.account}:table/btfp-prod-content`],
+      }),
+    );
+
     new cdk.CfnOutput(this, 'DeployRoleArn', { value: this.deployRole.roleArn });
   }
 }

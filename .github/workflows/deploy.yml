@@ -235,6 +235,19 @@ jobs:
         working-directory: infra/cdk
         run: npx cdk deploy 'BtfpProd/*' --require-approval never
 
+      # Only the two datasets committed to this repo (curated hazards, dog
+      # breeds) — the ASPCA plant/food dataset is gitignored (licensing, see
+      # docs/data-sourcing.md) and CI has no copy of it, so run.ts skips it
+      # here. That dataset stays a manual `pnpm seed:local`-style step
+      # against prod from a machine that has it. Blind-overwrites every
+      # curated row by its stable id on each run — see the "seed on merge"
+      # discussion in docs/data-sourcing.md for what that trades off.
+      - name: Seed prod content (breeds, curated hazards)
+        working-directory: data/seed
+        env:
+          CONTENT_TABLE_NAME: btfp-prod-content
+        run: pnpm exec tsx src/run.ts
+
   prerender-prod:
     needs: deploy-prod
     runs-on: ubuntu-latest
