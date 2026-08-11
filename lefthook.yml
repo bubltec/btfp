@@ -11,8 +11,6 @@ pre-commit:
         - "**/.turbo/**"
         - "**/node_modules/**"
       run: |
-        if [ -n "{staged_files}" ]; then
-          pnpm exec oxlint -c .oxlintrc.json --fix {staged_files} &&
-          pnpm exec oxfmt --write {staged_files}
-        fi
+        pnpm exec oxlint -c .oxlintrc.json --fix {staged_files} &&
+        pnpm exec oxfmt --write {staged_files}
       stage_fixed: true

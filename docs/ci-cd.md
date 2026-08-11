@@ -32,8 +32,11 @@ is the fallback for hotfixes or debugging a broken pipeline).
    the deploy already happened, which defeats the point.
 7. **`deploy-prod`** — gated by GitHub's `production` Environment protection rule: this job
    does not start until a required reviewer clicks approve in the Actions UI. Once approved:
-   downloads the *same* build artifacts from step 3 (not rebuilt), `cdk deploy BtfpProd/*`,
-   then crawls the now-live prod API with `apps/web/scripts/prerender.mjs` and runs
+   downloads the *same* build artifacts from step 3 (not rebuilt), `cdk deploy BtfpProd/*`, then
+   reseeds the two committed content datasets (`data/seed/source/dog-breeds.json`,
+   `product-activity-hazards.json`) straight into `btfp-prod-content` — see
+   [data-sourcing.md](./data-sourcing.md#seeding-prod-in-ci) for what this does and doesn't
+   cover — then crawls the now-live prod API with `apps/web/scripts/prerender.mjs` and runs
    `cdk deploy BtfpProd/Web` a second time to sync the real per-route HTML — mirrors the manual
    two-pass deploy already documented in `docs/infra.md`, just automated.
 

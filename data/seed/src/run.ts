@@ -78,9 +78,17 @@ async function main() {
     marshallOptions: { removeUndefinedValues: true },
   });
 
+  // Gitignored (ASPCA-licensed content, not committed — see
+  // docs/data-sourcing.md) — optional so CI, which only has the committed
+  // datasets below, can still seed those instead of crashing outright.
+  const things: Thing[] = [];
   const datasetPath = path.join(__dirname, '../source/dog-toxicity-dataset.json');
-  const raw = JSON.parse(await readFile(datasetPath, 'utf-8')) as RawDataset;
-  const things = transformDataset(raw);
+  try {
+    const raw = JSON.parse(await readFile(datasetPath, 'utf-8')) as RawDataset;
+    things.push(...transformDataset(raw));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
 
   const hazardsPath = path.join(__dirname, '../source/product-activity-hazards.json');
   const rawHazards = JSON.parse(await readFile(hazardsPath, 'utf-8')) as CuratedHazardsDataset;

@@ -63,6 +63,30 @@ Not every breed has a tagged trait — an empty `traits` array just means none o
 curated categories apply, not that the breed was skipped. Dog-only for now; cat breed traits
 (e.g. brachycephalic Persian/Himalayan) would be a natural follow-up but aren't in scope yet.
 
+## Seeding prod in CI
+
+`deploy-prod` runs `data/seed/src/run.ts` against `btfp-prod-content` after `cdk deploy` (see
+[ci-cd.md](./ci-cd.md)), so merging a change to a *committed* seed source (`dog-breeds.json`,
+`product-activity-hazards.json`) reaches prod automatically — no separate manual seed step, same
+"merge is the deploy trigger" model the rest of the pipeline already uses.
+
+This deliberately does **not** cover `dog-toxicity-dataset.json` or `vetmeds-toxins.json` — both
+gitignored per the licensing notes above, so CI has no copy to load; `run.ts` skips whichever of
+those it can't find on disk (same optional-load pattern for both) and only reseeds what's
+actually there. Updating the ASPCA/vetmeds content in prod is still a manual step, run locally
+against `btfp-prod-content` (e.g. `CONTENT_TABLE_NAME=btfp-prod-content pnpm --filter @btfp/seed
+exec tsx src/run.ts`, with real AWS credentials and no `--endpoint` flag) from a machine that has
+those files.
+
+Two things worth knowing about what this automation trades off:
+
+- **Blind overwrite, not a diff.** Every run rewrites every curated row by its stable hashed id —
+  fine for the reference data itself, but it will silently revert any hand-edit made directly to
+  a seeded `Thing` outside the normal moderation/contribution flow.
+- **Scoped IAM grant.** `infra/cdk/lib/ci-stack.ts`'s GitHub Actions deploy role is otherwise kept
+  to `sts:AssumeRole` on CDK's own bootstrap roles only (see that file's comments) — seeding is
+  the one exception, a narrow `dynamodb:BatchWriteItem` grant on exactly the prod content table.
+
 ## Expanding coverage
 
 Deliberately **not** proposing broad automated scraping here — most veterinary/poison-control
