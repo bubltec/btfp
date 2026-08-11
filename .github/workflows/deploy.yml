@@ -174,12 +174,20 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
-      - name: cdk diff BtfpProd
+      # BtfpCi included here too — deploy-prod now deploys it alongside
+      # BtfpProd (it defines the deploy role's own IAM policy), so its diff
+      # needs the same before-approval visibility as everything else this
+      # job is about to change, not a silent exception.
+      - name: cdk diff BtfpProd + BtfpCi
         working-directory: infra/cdk
         run: |
           echo '## BtfpProd diff' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           npx cdk diff 'BtfpProd/*' >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo '## BtfpCi diff' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          npx cdk diff BtfpCi >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
   deploy-prod:
@@ -230,6 +238,19 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
+
+      # Deployed here, not left as a one-off manual step: BtfpCi defines
+      # this very deploy role's own IAM policy (see ci-stack.ts), so any
+      # permission it grants — e.g. the DynamoDB access the seed step below
+      # needs — has to actually be applied before it's used. IAM changes
+      # take effect immediately for a role's *next* API call, so deploying
+      # it first in the same job, using the same already-assumed session,
+      # is enough — no separate step or session refresh needed. Gated by
+      # the same prod approval as everything else in this job, same as any
+      # other infra change reaching prod.
+      - name: cdk deploy BtfpCi
+        working-directory: infra/cdk
+        run: npx cdk deploy BtfpCi --require-approval never
 
       - name: cdk deploy BtfpProd
         working-directory: infra/cdk
