@@ -29,5 +29,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # test catches BFF ValidationPipe / contribution regressions that
-      # typecheck+build miss — deploy e2e only runs after merge today.
-      - run: pnpm turbo run typecheck build test
+      # typecheck+build miss. @btfp/e2e is deploy-only (Playwright + live dev + AWS).
+      - run: pnpm turbo run typecheck build test --filter=!@btfp/e2e
