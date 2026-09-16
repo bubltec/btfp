@@ -81,7 +81,11 @@ test('sign in with work email, submit a dangerous food item for dogs, verify con
   );
   await page.getByRole('button', { name: /submit for review/i }).click();
   const response = await submitResponse;
-  expect(response.ok(), `POST /contributions failed: ${response.status()}`).toBeTruthy();
+  const responseBody = await response.text();
+  expect(
+    response.ok(),
+    `POST /contributions failed: ${response.status()} ${responseBody}`,
+  ).toBeTruthy();
 
   // --- Step 7: Assert on the confirmation screen ---
   // Match "Thanks!" without the paw emoji — accessible names vary by browser.

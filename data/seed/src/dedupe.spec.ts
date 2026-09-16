@@ -43,6 +43,18 @@ describe('thingsMatch', () => {
     expect(thingsMatch(broken, candidate)).toBe(false);
     expect(findDuplicateThing([broken, candidate], candidate)).toBe(candidate);
   });
+
+  it('ignores non-string alias entries instead of throwing', () => {
+    const candidate = thing({ id: 'c', name: 'Chocolate', thingTypeId: 'food' });
+    const broken = thing({
+      id: 'x',
+      name: 'Cocoa',
+      thingTypeId: 'food',
+      otherNames: ['Cacao', 42 as unknown as string],
+    });
+    expect(() => thingsMatch(broken, candidate)).not.toThrow();
+    expect(() => findDuplicateThing([broken, candidate], candidate)).not.toThrow();
+  });
 });
 
 describe('normalizeThingName', () => {

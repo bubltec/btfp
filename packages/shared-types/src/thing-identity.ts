@@ -32,7 +32,7 @@ const SEVERITY_RANK: Record<Severity, number> = {
 
 /** Case/punctuation-insensitive form used for identity comparison. */
 export function normalizeThingName(name: string): string {
-  if (!name) return '';
+  if (typeof name !== 'string' || !name) return '';
   return name
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')
@@ -96,13 +96,16 @@ export function hardIdentityKeys(thing: ThingIdentity): string[] {
 }
 
 function aliasKeys(thing: ThingIdentity): string[] {
-  return (thing.otherNames ?? [])
+  const aliases = Array.isArray(thing.otherNames) ? thing.otherNames : [];
+  return aliases
+    .filter((name): name is string => typeof name === 'string')
     .map((name) => normalizedPrimaryName(name))
     .filter(Boolean)
     .map((name) => `${thing.thingTypeId}#name#${name}`);
 }
 
 function nameTokens(name: string): Set<string> {
+  if (typeof name !== 'string') return new Set();
   return new Set(
     normalizedPrimaryName(name)
       .split(' ')
@@ -145,7 +148,8 @@ function hardKeysOverlap(a: ThingIdentity, b: ThingIdentity): boolean {
  * that as ambiguous and not auto-link.
  */
 export function thingsMatch(a: ThingIdentity, b: ThingIdentity): boolean {
-  if (!a.name?.trim() || !b.name?.trim()) return false;
+  if (typeof a.name !== 'string' || typeof b.name !== 'string') return false;
+  if (!a.name.trim() || !b.name.trim()) return false;
   if (a.thingTypeId !== b.thingTypeId) return false;
   return (
     hardKeysOverlap(a, b) ||
