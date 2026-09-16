@@ -31,7 +31,8 @@ deploy gets done, just no longer the routine way changes ship.
     candidate pet-hazard reports from Reddit into the moderation queue as unverified
     `Contribution`s — see [docs/scraper.md](./scraper.md).
   - **Api** — one Lambda (container image — see [docs/ci-cd.md](./ci-cd.md)) running the
-    NestJS BFF, behind an API Gateway HTTP API.
+    NestJS BFF, behind an API Gateway HTTP API. Traffic hits a `live` alias; CodeDeploy
+    canaries each new version (10% / 5 minutes) and rolls back on Lambda Errors.
   - **Web** — S3 (private, OAC) + CloudFront + WAFv2 + ACM cert + Route53 alias record(s).
 
 `BtfpDev` serves `dev.badthingsforpets.com`; `BtfpProd` serves `badthingsforpets.com` and

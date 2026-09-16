@@ -10,9 +10,19 @@ allowBuilds:
   '@scarf/scarf': false
   esbuild: true
   lefthook: true
+# Install native optional deps for both Mac arches so a Rosetta Node
+# (leftover Homebrew at /usr/local) and nvm's arm64 Node can share
+# the same node_modules. See pnpm.io/settings#supportedarchitectures.
+supportedArchitectures:
+  os:
+    - current
+  cpu:
+    - arm64
+    - x64
 # First-party packages published by our own CI (vs. third-party supply-chain
 # risk, which is what minimumReleaseAge exists to guard against) — exempt
 # the whole scope so the `next` rolling-prerelease channel isn't silently
 # blocked from ever installing what CI just published.
 minimumReleaseAgeExclude:
   - '@bubltec/*'
+  - '@types/node@26.6.1'

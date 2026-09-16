@@ -5,6 +5,7 @@ import * as ses from 'aws-cdk-lib/aws-ses';
 import * as sesActions from 'aws-cdk-lib/aws-ses-actions';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import { Platform } from 'aws-cdk-lib/aws-ecr-assets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import {
   AwsCustomResource,
@@ -14,6 +15,7 @@ import {
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HOSTED_ZONE_ID, ROOT_DOMAIN, FORWARD_TO_ADDRESS } from './config.js';
+import { publishLiveAliasWithCanary } from './lambda-canary.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -79,11 +81,16 @@ export class EmailStack extends cdk.Stack {
       }),
     );
 
-    const forwarderFn = new lambda.Function(this, 'ForwarderFunction', {
-      functionName: 'btfp-email-forwarder',
-      runtime: lambda.Runtime.NODEJS_22_X,
-      handler: 'index.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/email-forwarder')),
+    const forwarderFn = new lambda.DockerImageFunction(this, 'ForwarderFunction', {
+      // No pinned functionName — zip→image is a CloudFormation replacement,
+      // and a fixed name blocks create-before-delete (same lesson as
+      // BffFunction in api-stack.ts).
+      code: lambda.DockerImageCode.fromImageAsset(
+        path.join(__dirname, '../lambda/email-forwarder'),
+        {
+          platform: Platform.LINUX_AMD64,
+        },
+      ),
       timeout: cdk.Duration.seconds(30),
       environment: {
         MAIL_BUCKET_NAME: mailBucket.bucketName,
@@ -91,6 +98,8 @@ export class EmailStack extends cdk.Stack {
         FORWARD_TO_ADDRESS,
       },
     });
+
+    const live = publishLiveAliasWithCanary(forwarderFn);
 
     mailBucket.grantRead(forwarderFn);
     forwarderFn.addToRolePolicy(
@@ -100,7 +109,7 @@ export class EmailStack extends cdk.Stack {
       }),
     );
     // sesActions.Lambda's bind() below auto-grants SES invoke permission on
-    // the function, so no explicit addPermission call needed here.
+    // the live alias, so no explicit addPermission call needed here.
 
     const ruleSet = new ses.ReceiptRuleSet(this, 'ReceiptRuleSet', {
       receiptRuleSetName: 'btfp-inbound',
@@ -119,7 +128,7 @@ export class EmailStack extends cdk.Stack {
       scanEnabled: true,
       actions: [
         new sesActions.S3({ bucket: mailBucket }),
-        new sesActions.Lambda({ function: forwarderFn }),
+        new sesActions.Lambda({ function: live }),
       ],
     });
 

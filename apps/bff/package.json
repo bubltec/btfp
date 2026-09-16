@@ -15,9 +15,9 @@
     "@aws-sdk/client-ssm": "^3.716.0",
     "@aws-sdk/lib-dynamodb": "^3.716.0",
     "@btfp/shared-types": "workspace:*",
-    "@bubltec/mycota-auth": "0.1.0",
-    "@bubltec/mycota-dynamo": "0.1.0",
-    "@bubltec/mycota-professional-verification": "0.1.0",
+    "@bubltec/mycota-auth": "0.6.0",
+    "@bubltec/mycota-dynamo": "0.6.0",
+    "@bubltec/mycota-professional-verification": "0.6.0",
     "@fastify/aws-lambda": "^4.1.0",
     "@fastify/cookie": "^9.4.0",
     "@nestjs/common": "^10.4.0",
@@ -38,7 +38,7 @@
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
+    "@types/node": "^26.6.1",
     "@types/passport-github2": "^1.2.9",
     "@types/passport-google-oauth20": "^2.0.16",
     "esbuild": "^0.24.2",

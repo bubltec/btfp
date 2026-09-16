@@ -3,7 +3,13 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { BatchWriteCommand, DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import type { Breed, PetType, Thing, ThingType } from '@btfp/shared-types';
+import {
+  dedupeThings,
+  type Breed,
+  type PetType,
+  type Thing,
+  type ThingType,
+} from '@btfp/shared-types';
 import {
   PET_TYPES,
   THING_TYPES,
@@ -39,6 +45,18 @@ async function batchWrite(db: DynamoDBDocumentClient, items: Record<string, unkn
       new BatchWriteCommand({
         RequestItems: {
           [CONTENT_TABLE_NAME]: batch.map((Item) => ({ PutRequest: { Item } })),
+        },
+      }),
+    );
+  }
+}
+
+async function batchDelete(db: DynamoDBDocumentClient, keys: { PK: string; SK: string }[]) {
+  for (const batch of chunk(keys, BATCH_SIZE)) {
+    await db.send(
+      new BatchWriteCommand({
+        RequestItems: {
+          [CONTENT_TABLE_NAME]: batch.map((Key) => ({ DeleteRequest: { Key } })),
         },
       }),
     );
@@ -109,15 +127,25 @@ async function main() {
   const rawBreeds = JSON.parse(await readFile(breedsPath, 'utf-8')) as DogBreedsDataset;
   const breeds = transformDogBreeds(rawBreeds);
 
+  const { things: uniqueThings, discarded } = dedupeThings(things);
+
   console.log(
     `Seeding ${PET_TYPES.length} pet types, ${THING_TYPES.length} thing types, ${breeds.length} breeds, ` +
-      `${things.length} things into ${CONTENT_TABLE_NAME}${endpoint ? ` at ${endpoint}` : ''}`,
+      `${uniqueThings.length} things` +
+      (discarded.length > 0 ? ` (${discarded.length} duplicates collapsed)` : '') +
+      ` into ${CONTENT_TABLE_NAME}${endpoint ? ` at ${endpoint}` : ''}`,
   );
 
   await batchWrite(db, PET_TYPES.map(petTypeItem));
   await batchWrite(db, THING_TYPES.map(thingTypeItem));
   await batchWrite(db, breeds.map(breedItem));
-  await batchWrite(db, things.map(thingItem));
+  await batchWrite(db, uniqueThings.map(thingItem));
+  if (discarded.length > 0) {
+    await batchDelete(
+      db,
+      discarded.map((thing) => ({ PK: `THING#${thing.id}`, SK: 'META' })),
+    );
+  }
 
   console.log('Done.');
 }

@@ -7,11 +7,12 @@ import {
   UpdateCommand,
   DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
-import type { Contribution, Thing } from '@btfp/shared-types';
+import { mergeThings, type Contribution, type Thing, type ThingIdentity } from '@btfp/shared-types';
 import { DYNAMO_DOC_CLIENT } from '@bubltec/mycota-dynamo';
 import { UsersService } from '@bubltec/mycota-auth';
 import { CONTENT_TABLE_NAME } from '../dynamo/dynamo.constants.js';
 import { ThingsService } from '../things/things.service.js';
+import { SearchService } from '../search/search.service.js';
 import type { CreateContributionDto } from './dto/create-contribution.dto.js';
 
 @Injectable()
@@ -20,21 +21,27 @@ export class ContributionsService {
     @Inject(DYNAMO_DOC_CLIENT) private readonly db: DynamoDBDocumentClient,
     private readonly things: ThingsService,
     private readonly users: UsersService,
+    private readonly search: SearchService,
   ) {}
 
   async propose(dto: CreateContributionDto, contributorId: string): Promise<Contribution> {
     const id = randomUUID();
     const now = new Date().toISOString();
+    const existingId =
+      dto.thingId ??
+      (dto.payload.name && dto.payload.thingTypeId
+        ? (await this.search.findDuplicate(dto.payload))?.id
+        : undefined);
     const contribution: Contribution = {
       id,
-      thingId: dto.thingId,
+      thingId: existingId,
       contributorId,
       status: 'pending',
       payload: dto.payload,
       createdAt: now,
     };
 
-    const targetThingId = dto.thingId ?? id;
+    const targetThingId = existingId ?? id;
     await this.db.send(
       new PutCommand({
         TableName: CONTENT_TABLE_NAME,
@@ -73,40 +80,55 @@ export class ContributionsService {
 
     const now = new Date().toISOString();
     const contributor = await this.users.getById(contribution.contributorId);
-    // For an edit (contribution.thingId set), merge onto the real existing
-    // thing so fields the edit payload didn't touch survive. For a brand-new
-    // thing there's nothing to merge onto, so fall back to empty defaults.
+    const payload = contribution.payload;
+    // Explicit edits target contribution.thingId. A "new" thing that matches
+    // an existing row is folded into that row instead of inserting a duplicate.
+    const duplicate =
+      !contribution.thingId && payload.name && payload.thingTypeId
+        ? await this.search.findDuplicate(payload as ThingIdentity)
+        : undefined;
     const existingThing = contribution.thingId
       ? await this.things.getById(contribution.thingId)
-      : null;
-    const base: Thing = existingThing ?? {
-      id: contribution.thingId ?? thingId,
-      name: 'Unnamed',
-      otherNames: [],
-      thingTypeId: 'unknown',
-      petTypes: [],
-      details: {},
-      source: `contributor:${contribution.contributorId}`,
-      verified: false,
-      createdAt: now,
-      updatedAt: now,
-    };
+      : (duplicate ?? null);
 
-    const details = { ...base.details, ...contribution.payload.details };
+    const details = { ...existingThing?.details, ...payload.details };
     if (contributor?.professional?.status === 'verified') {
       details.verifiedOrgDomain = contributor.professional.domain;
     }
 
-    const thing: Thing = {
-      ...base,
-      ...contribution.payload,
-      id: contribution.thingId ?? thingId,
+    const incoming: Thing = {
+      id: existingThing?.id ?? contribution.thingId ?? thingId,
+      name: payload.name ?? existingThing?.name ?? 'Unnamed',
+      otherNames: payload.otherNames ?? existingThing?.otherNames ?? [],
+      thingTypeId: payload.thingTypeId ?? existingThing?.thingTypeId ?? 'unknown',
+      petTypes: payload.petTypes ?? existingThing?.petTypes ?? [],
       details,
+      source:
+        payload.source ?? existingThing?.source ?? `contributor:${contribution.contributorId}`,
+      sourceUrl: payload.sourceUrl ?? existingThing?.sourceUrl,
       verified: true,
       contributorId: contribution.contributorId,
-      createdAt: base.createdAt,
+      createdAt: existingThing?.createdAt ?? now,
       updatedAt: now,
     };
+
+    const thing: Thing = !existingThing
+      ? incoming
+      : contribution.thingId
+        ? {
+            ...existingThing,
+            ...incoming,
+            id: existingThing.id,
+            details,
+            createdAt: existingThing.createdAt,
+          }
+        : {
+            ...mergeThings(existingThing, incoming),
+            verified: true,
+            contributorId: contribution.contributorId,
+            updatedAt: now,
+            details,
+          };
     await this.things.putThing(thing);
 
     await this.db.send(

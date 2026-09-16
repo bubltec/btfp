@@ -1,8 +1,8 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses';
 
-// No bundling needed — the AWS SDK v3 clients above ship built into the
-// Node.js 22 Lambda managed runtime, so this asset is just this one file.
+// No bundling needed — AWS SDK v3 clients ship in the Lambda Node.js
+// base image (see Dockerfile), same as they did on the zip managed runtime.
 
 const s3 = new S3Client({});
 const ses = new SESClient({});

@@ -6,3 +6,5 @@ export * from './user.js';
 export * from './contribution.js';
 export * from './quiz.js';
 export * from './slugify.js';
+export * from './thing-identity.js';
+export * from './dedupe.js';

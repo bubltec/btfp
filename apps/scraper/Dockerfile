@@ -3,7 +3,7 @@
 # long-lived-process shape, not Lambda-runtime-shaped like apps/bff/Dockerfile
 # — this runs as a scheduled ECS Fargate task, not behind the Lambda runtime
 # interface.
-FROM node:22-slim
+FROM node:26-slim
 
 COPY dist/index.js /app/index.js
 

@@ -10,9 +10,10 @@ apps/web (Vite/React)  --/api/*-->  CloudFront  --> apps/bff (NestJS, one Lambda
 ```
 
 One CloudFront distribution serves both: the default behavior serves the built React app
-from S3, and `/api/*` is routed to an API Gateway HTTP API in front of the BFF Lambda. This
-means the frontend and API share an origin in every environment (no CORS to think about in
-prod), and WAF at the CloudFront layer covers both.
+from S3, and `/api/*` is routed to an API Gateway HTTP API in front of the BFF Lambda's
+`live` alias (CodeDeploy canaries new versions; see [ci-cd.md](ci-cd.md)). This means the
+frontend and API share an origin in every environment (no CORS to think about in prod), and
+WAF at the CloudFront layer covers both.
 
 ## Why these choices
 

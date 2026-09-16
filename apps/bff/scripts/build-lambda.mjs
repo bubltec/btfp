@@ -15,7 +15,7 @@ await build({
   outfile: 'dist/lambda.js',
   bundle: true,
   platform: 'node',
-  target: 'node22',
+  target: 'node26',
   // CJS avoids needing a "type": "module" package.json inside the deployed
   // zip — Lambda's Node runtime treats a bare .js file as CJS by default.
   format: 'cjs',

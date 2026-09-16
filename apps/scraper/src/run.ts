@@ -3,7 +3,7 @@ import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import type { ScraperConfig } from './config.js';
 import { RedditClient } from './reddit/client.js';
 import { classifyPost } from './extract/classify.js';
-import { loadTaxonomy } from './taxonomy.js';
+import { loadTaxonomy, loadThingCatalog } from './taxonomy.js';
 import { getWatermark, isAlreadyProcessed, markProcessed, putWatermark } from './dedup.js';
 import { writeContribution } from './contribution.js';
 import type { RedditPost } from './reddit/types.js';
@@ -32,6 +32,7 @@ export async function run(config: ScraperConfig, db: DynamoDBDocumentClient): Pr
   });
   const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION ?? 'us-east-1' });
   const taxonomy = await loadTaxonomy(db);
+  const catalog = await loadThingCatalog(db);
 
   for (const subreddit of config.subreddits) {
     const watermark = await getWatermark(db, subreddit);
@@ -42,9 +43,14 @@ export async function run(config: ScraperConfig, db: DynamoDBDocumentClient): Pr
       if (await isAlreadyProcessed(db, post.id)) continue;
 
       if (isWorthClassifying(post)) {
-        const extraction = await classifyPost(bedrock, config.bedrockInferenceProfileId, post, taxonomy);
+        const extraction = await classifyPost(
+          bedrock,
+          config.bedrockInferenceProfileId,
+          post,
+          taxonomy,
+        );
         if (extraction?.isPetHazardReport) {
-          await writeContribution(db, post, extraction);
+          await writeContribution(db, post, extraction, catalog);
           candidateCount += 1;
         }
       }
