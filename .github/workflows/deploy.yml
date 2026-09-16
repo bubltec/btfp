@@ -121,6 +121,27 @@ jobs:
       - run: pnpm --filter @btfp/e2e exec playwright install-deps chromium
         if: steps.playwright-cache.outputs.cache-hit == 'true'
 
+      # NestJS container cold start lands on the first real API hit after
+      # deploy-dev. Warm it with a cheap read so e2e's email-sign-in POST
+      # (DNS + Bedrock + SES) isn't competing with bootstrap for the 30s
+      # Lambda budget.
+      - name: Warm dev BFF
+        env:
+          BASIC_AUTH_USER: ${{ secrets.BTFP_DEV_BASIC_AUTH_USER }}
+          BASIC_AUTH_PASSWORD: ${{ secrets.BTFP_DEV_BASIC_AUTH_PASSWORD }}
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if curl -sf -u "$BASIC_AUTH_USER:$BASIC_AUTH_PASSWORD" \
+              "https://dev.badthingsforpets.com/api/pet-types" >/dev/null; then
+              echo "BFF warm after attempt $attempt"
+              exit 0
+            fi
+            echo "BFF not ready (attempt $attempt), retrying…"
+            sleep 10
+          done
+          echo "BFF never responded after deploy-dev"
+          exit 1
+
       # The exact invocation docs/e2e-testing.md already documents running
       # by hand — now automated. Note: this permanently accumulates test
       # data (a submitted thing, a signed-up user) in dev's real DynamoDB

@@ -74,7 +74,9 @@ export class ApiStack extends cdk.Stack {
         platform: Platform.LINUX_AMD64,
       }),
       memorySize: 512,
-      timeout: cdk.Duration.seconds(15),
+      // Email sign-in does DNS + homepage fetch + Bedrock + SES in one request;
+      // on a cold container (right after deploy) that can exceed 15s.
+      timeout: cdk.Duration.seconds(30),
       environment: {
         NODE_ENV: 'production',
         STAGE: props.envConfig.envName,
