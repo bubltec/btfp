@@ -98,7 +98,7 @@ in this repo.
 ## Before opening a PR
 
 ```bash
-pnpm turbo run typecheck build   # tsc + build — same as CI
+pnpm turbo run typecheck build test   # same as CI (includes BFF contribution tests)
 ```
 
 Lint and format should already be correct from the Lefthook pre-commit hook. For a full-tree

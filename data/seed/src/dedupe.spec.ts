@@ -36,6 +36,15 @@ function thing(overrides: Partial<Thing> & Pick<Thing, 'id' | 'name' | 'thingTyp
   };
 }
 
+describe('thingsMatch', () => {
+  it('ignores catalog rows with a missing name instead of throwing', () => {
+    const candidate = thing({ id: 'c', name: 'Chocolate', thingTypeId: 'food' });
+    const broken = thing({ id: 'x', name: '', thingTypeId: 'food' });
+    expect(thingsMatch(broken, candidate)).toBe(false);
+    expect(findDuplicateThing([broken, candidate], candidate)).toBe(candidate);
+  });
+});
+
 describe('normalizeThingName', () => {
   it('collapses case, punctuation, and whitespace', () => {
     expect(normalizeThingName('Macadamia Nuts')).toBe(normalizeThingName('Macadamia nuts'));

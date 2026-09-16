@@ -7,7 +7,9 @@ is the fallback for hotfixes or debugging a broken pipeline).
 
 ## The path a change takes
 
-1. **Branch, PR into `main`.** `.github/workflows/ci.yml` runs typecheck/build on the PR.
+1. **Branch, PR into `main`.** `.github/workflows/ci.yml` runs typecheck, build, and **test**
+   on the PR (including BFF `ValidationPipe` coverage for `POST /contributions` — the same
+   checks deploy e2e exercises, but without AWS or Playwright).
    Lint and format are enforced locally via [Lefthook](contributing.md#git-hooks-lefthook) on
    commit, not re-checked in CI. No AWS credentials exist anywhere in this workflow — PRs can't
    deploy anything, by construction (see [OIDC setup](#github-oidc-setup-for-aws) below).
