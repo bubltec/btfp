@@ -3,12 +3,11 @@
 # the one built file. Must run `pnpm --filter @btfp/bff build` before this
 # image builds, same ordering requirement as the zip-based deploy it replaces.
 #
-# Pinned to 24, not the repo's dev-tooling 26 (see root package.json
-# engines / .nvmrc): this is the actual Lambda execution runtime, and AWS
-# only publishes this base image for versions Lambda supports — 24 is the
-# newest as of writing (26 isn't LTS until next month, and Lambda hasn't
-# added it yet). Bump this once AWS ships a `nodejs:26` tag.
-FROM public.ecr.aws/lambda/nodejs:24
+# Node 26 is a Lambda public-preview runtime until GA (targeted ~Nov 2026).
+# The identifier stays `nodejs26.x` at GA; the image tag drops `-preview`.
+# aws-cdk-lib has no NODEJS_26_X enum yet — this image *is* the runtime
+# for DockerImageFunction, so the Dockerfile is the source of truth.
+FROM public.ecr.aws/lambda/nodejs:26-preview
 
 COPY dist/lambda.js ${LAMBDA_TASK_ROOT}/
 

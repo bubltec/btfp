@@ -81,10 +81,10 @@ export class EmailStack extends cdk.Stack {
 
     const forwarderFn = new lambda.Function(this, 'ForwarderFunction', {
       functionName: 'btfp-email-forwarder',
-      // Newest Lambda-supported runtime, not the repo's dev-tooling Node 26
-      // (see root package.json/.nvmrc) — aws-cdk-lib has no NODEJS_26_X yet,
-      // since 26 isn't LTS until next month. Bump once it lands.
-      runtime: lambda.Runtime.NODEJS_24_X,
+      // nodejs26.x is a Lambda public-preview runtime until GA (~Nov 2026);
+      // the identifier does not change at GA. Constructed by name because
+      // aws-cdk-lib still has no NODEJS_26_X enum (latest checked: 2.269.0).
+      runtime: new lambda.Runtime('nodejs26.x', lambda.RuntimeFamily.NODEJS),
       handler: 'index.handler',
       code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/email-forwarder')),
       timeout: cdk.Duration.seconds(30),
