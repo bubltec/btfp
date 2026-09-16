@@ -90,7 +90,9 @@ export class CiStack extends cdk.Stack {
     // directly via the SDK, not through `cdk deploy` — so it needs its own
     // grant rather than riding the bootstrap roles' CloudFormation-exec
     // permissions. Scoped to exactly the one table and the one action the
-    // script performs (BatchWriteItem — it never reads or deletes).
+    // script performs (BatchWriteItem — puts of curated rows, plus
+    // DeleteRequests for Thing ids retired when overlapping seed sources
+    // collapse to one row).
     this.deployRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ['dynamodb:BatchWriteItem'],

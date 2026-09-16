@@ -25,7 +25,7 @@ const extraction: ExtractionResult = {
 };
 
 describe('writeContribution', () => {
-  it('writes an item matching contributions.service.ts propose()\'s exact key shape', async () => {
+  it("writes an item matching contributions.service.ts propose()'s exact key shape", async () => {
     const db = mockClient(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
 
@@ -74,5 +74,29 @@ describe('writeContribution', () => {
     );
 
     expect(contribution.payload.petTypes).toEqual([]);
+  });
+
+  it('attaches to an existing Thing when the extracted name matches the catalog', async () => {
+    const db = mockClient(DynamoDBDocumentClient);
+    db.on(PutCommand).resolves({});
+
+    const contribution = await writeContribution(
+      DynamoDBDocumentClient.from(new DynamoDBClient({})),
+      post,
+      { ...extraction, thingName: 'Chocolate', thingTypeId: 'food' },
+      [
+        {
+          id: 'existing-chocolate',
+          name: 'Chocolate / cocoa',
+          thingTypeId: 'food',
+          otherNames: [],
+        },
+      ],
+    );
+
+    expect(contribution.thingId).toBe('existing-chocolate');
+    const item = db.commandCalls(PutCommand)[0]?.args[0].input.Item as Record<string, unknown>;
+    expect(item.PK).toBe('THING#existing-chocolate');
+    expect(item.thingId).toBe('existing-chocolate');
   });
 });

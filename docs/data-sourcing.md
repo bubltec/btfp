@@ -82,7 +82,10 @@ Two things worth knowing about what this automation trades off:
 
 - **Blind overwrite, not a diff.** Every run rewrites every curated row by its stable hashed id —
   fine for the reference data itself, but it will silently revert any hand-edit made directly to
-  a seeded `Thing` outside the normal moderation/contribution flow.
+  a seeded `Thing` outside the normal moderation/contribution flow. Overlapping source rows
+  (the same plant listed under every common name, ASPCA vs vetmeds spelling variants) are
+  collapsed before write; ids that existed only as the discarded duplicate are deleted so a
+  re-seed doesn't leave both the canonical row and the old extra in the table.
 - **Scoped IAM grant.** `infra/cdk/lib/ci-stack.ts`'s GitHub Actions deploy role is otherwise kept
   to `sts:AssumeRole` on CDK's own bootstrap roles only (see that file's comments) — seeding is
   the one exception, a narrow `dynamodb:BatchWriteItem` grant on exactly the prod content table.
