@@ -26,9 +26,10 @@ is the fallback for hotfixes or debugging a broken pipeline).
    (or the alias) reports any Lambda Errors. `cdk deploy` waits for that shift to finish, so this
    job runs ~5 minutes longer whenever the BFF image actually changed. Dev is never prerendered
    (Basic-Auth-walled, `noindex` — see [docs/seo.md](./seo.md)), so that's the whole job.
-5. **`e2e`** — runs `apps/e2e`'s Playwright suite against `https://dev.badthingsforpets.com`,
-   the exact invocation [docs/e2e-testing.md](./e2e-testing.md) already documented running by
-   hand. A failure here stops the pipeline; prod is untouched.
+5. **`e2e`** — warms dev's BFF with a cheap `GET /api/pet-types` (Nest container cold start
+   after deploy), then runs `apps/e2e`'s Playwright suite against
+   `https://dev.badthingsforpets.com`, the exact invocation [docs/e2e-testing.md](./e2e-testing.md)
+   already documented running by hand. A failure here stops the pipeline; prod is untouched.
 6. **`prod-diff`** — computes `cdk diff BtfpProd/*` and posts it to the job's summary. Runs
    automatically (not gated), specifically so the diff is visible *before* anyone is asked to
    approve the next job — a diff computed inside the gated job itself would only appear after
