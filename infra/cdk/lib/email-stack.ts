@@ -5,6 +5,7 @@ import * as ses from 'aws-cdk-lib/aws-ses';
 import * as sesActions from 'aws-cdk-lib/aws-ses-actions';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import { Platform } from 'aws-cdk-lib/aws-ecr-assets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import {
   AwsCustomResource,
@@ -79,14 +80,16 @@ export class EmailStack extends cdk.Stack {
       }),
     );
 
-    const forwarderFn = new lambda.Function(this, 'ForwarderFunction', {
-      functionName: 'btfp-email-forwarder',
-      // nodejs26.x is a Lambda public-preview runtime until GA (~Nov 2026);
-      // the identifier does not change at GA. Constructed by name because
-      // aws-cdk-lib still has no NODEJS_26_X enum (latest checked: 2.269.0).
-      runtime: new lambda.Runtime('nodejs26.x', lambda.RuntimeFamily.NODEJS),
-      handler: 'index.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/email-forwarder')),
+    const forwarderFn = new lambda.DockerImageFunction(this, 'ForwarderFunction', {
+      // No pinned functionName — zip→image is a CloudFormation replacement,
+      // and a fixed name blocks create-before-delete (same lesson as
+      // BffFunction in api-stack.ts).
+      code: lambda.DockerImageCode.fromImageAsset(
+        path.join(__dirname, '../lambda/email-forwarder'),
+        {
+          platform: Platform.LINUX_AMD64,
+        },
+      ),
       timeout: cdk.Duration.seconds(30),
       environment: {
         MAIL_BUCKET_NAME: mailBucket.bucketName,

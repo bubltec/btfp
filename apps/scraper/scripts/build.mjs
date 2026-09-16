@@ -7,7 +7,7 @@ await build({
   outfile: 'dist/index.js',
   bundle: true,
   platform: 'node',
-  target: 'node22',
+  target: 'node26',
   // CJS avoids needing "type": "module" in the deployed image — Node treats
   // a bare .js file as CJS by default.
   format: 'cjs',
