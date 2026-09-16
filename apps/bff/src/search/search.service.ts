@@ -22,12 +22,24 @@ function matchesBreed(thing: Thing, breed: Breed): boolean {
   );
 }
 
+/** Dynamo rows can predate schema tightening; keep scans from throwing in findDuplicate. */
+function sanitizeCatalogThing(thing: Thing): Thing {
+  return {
+    ...thing,
+    name: typeof thing.name === 'string' ? thing.name : '',
+    thingTypeId: typeof thing.thingTypeId === 'string' ? thing.thingTypeId : 'unknown',
+    otherNames: Array.isArray(thing.otherNames)
+      ? thing.otherNames.filter((name): name is string => typeof name === 'string')
+      : [],
+  };
+}
+
 /** Common things first (alphabetical among themselves), then the rest alphabetically. */
 function sortByCommonality(things: Thing[]): Thing[] {
   return [...things].sort((a, b) => {
     const commonDiff =
       Number(COMMON_THING_NAMES.has(b.name)) - Number(COMMON_THING_NAMES.has(a.name));
-    return commonDiff !== 0 ? commonDiff : a.name.localeCompare(b.name);
+    return commonDiff !== 0 ? commonDiff : (a.name ?? '').localeCompare(b.name ?? '');
   });
 }
 
@@ -123,7 +135,9 @@ export class SearchService {
           ExclusiveStartKey: lastKey,
         }),
       );
-      items.push(...(result.Items ?? []).map((item) => stripDynamoKeys(item) as Thing));
+      items.push(
+        ...(result.Items ?? []).map((item) => sanitizeCatalogThing(stripDynamoKeys(item) as Thing)),
+      );
       lastKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
     } while (lastKey);
 
