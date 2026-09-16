@@ -72,11 +72,22 @@ test('sign in with work email, submit a dangerous food item for dogs, verify con
       'https://www.aspca.org/pet-care/animal-poison-control/toxic-and-non-toxic-plants/chocolate',
     );
 
-  // Submit
+  // Submit — wait for the API, not just the click (findDuplicate scans the table).
+  const submitResponse = page.waitForResponse(
+    (res) =>
+      res.url().includes('/api/contributions') &&
+      res.request().method() === 'POST' &&
+      res.status() !== 0,
+  );
   await page.getByRole('button', { name: /submit for review/i }).click();
+  const response = await submitResponse;
+  expect(response.ok(), `POST /contributions failed: ${response.status()}`).toBeTruthy();
 
   // --- Step 7: Assert on the confirmation screen ---
-  await expect(page.getByRole('heading', { name: /thanks! 🐾/i })).toBeVisible();
+  // Match "Thanks!" without the paw emoji — accessible names vary by browser.
+  await expect(page.getByRole('heading', { name: /^thanks!/i })).toBeVisible({
+    timeout: 15000,
+  });
   await expect(
     page.getByText('Your submission is in the moderation queue for review.'),
   ).toBeVisible();
