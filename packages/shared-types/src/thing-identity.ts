@@ -32,6 +32,7 @@ const SEVERITY_RANK: Record<Severity, number> = {
 
 /** Case/punctuation-insensitive form used for identity comparison. */
 export function normalizeThingName(name: string): string {
+  if (!name) return '';
   return name
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')
@@ -144,6 +145,7 @@ function hardKeysOverlap(a: ThingIdentity, b: ThingIdentity): boolean {
  * that as ambiguous and not auto-link.
  */
 export function thingsMatch(a: ThingIdentity, b: ThingIdentity): boolean {
+  if (!a.name?.trim() || !b.name?.trim()) return false;
   if (a.thingTypeId !== b.thingTypeId) return false;
   return (
     hardKeysOverlap(a, b) ||
