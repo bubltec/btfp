@@ -1,4 +1,5 @@
-import { IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsOptional, IsString, ValidateNested } from 'class-validator';
 import { CreateThingDto } from '../../things/dto/create-thing.dto.js';
 
 export class CreateContributionDto {
@@ -7,5 +8,7 @@ export class CreateContributionDto {
   @IsOptional()
   thingId?: string;
 
+  @ValidateNested()
+  @Type(() => CreateThingDto)
   payload!: CreateThingDto;
 }

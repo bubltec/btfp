@@ -104,10 +104,11 @@ test/verify call above before navigating here), in order:
   getByLabel(/why is it dangerous/i)
 - "Source (optional)" — a text input, getByLabel(/source/i)
 - Submit button: getByRole('button', { name: /submit for review/i })
-- On success, the page navigates to a confirmation screen with heading
-  "Thanks! 🐾" and text "Your submission is in the moderation queue for
-  review." — assert on that heading/text, not on generic phrases like
-  "success" or "thank you" (note the real text is "Thanks!" not "Thank you").
+- On success, the page shows a confirmation screen with heading "Thanks! 🐾"
+  and text "Your submission is in the moderation queue for review." — assert
+  with getByRole('heading', { name: /^thanks!/i }) (omit the emoji; accessible
+  names vary) and the exact queue text. Wait for POST /api/contributions to
+  finish before asserting — the handler scans the catalog for duplicates.
 
 /moderation page: each pending item has "Approve" and "Reject" buttons
 (getByRole('button', { name: /^approve$/i }) / /^reject$/i). Reject triggers
