@@ -75,7 +75,10 @@ jobs:
       # doesn't build it — needed before any cdk deploy/diff, since
       # ecs.ContainerImage.fromAsset builds the Docker image at synth time,
       # not just on deploy (so cdk diff needs this too, not just deploy).
-      - run: pnpm --filter @btfp/scraper build
+      # turbo, not `pnpm --filter`: the scraper bundles @btfp/shared-types,
+      # whose package.json exports only dist/. filter runs this package
+      # alone and misses ^build (that's what broke deploy-dev after #20).
+      - run: pnpm turbo run build --filter=@btfp/scraper
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -167,7 +170,7 @@ jobs:
 
       # See the matching comment in deploy-dev — needed for cdk diff too,
       # not just deploy.
-      - run: pnpm --filter @btfp/scraper build
+      - run: pnpm turbo run build --filter=@btfp/scraper
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -232,7 +235,7 @@ jobs:
           path: apps/web/dist
 
       # See the matching comment in deploy-dev.
-      - run: pnpm --filter @btfp/scraper build
+      - run: pnpm turbo run build --filter=@btfp/scraper
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -321,7 +324,7 @@ jobs:
       - run: pnpm --filter @btfp/shared-types build
 
       # See the matching comment in deploy-dev — needed for cdk synth here too.
-      - run: pnpm --filter @btfp/scraper build
+      - run: pnpm turbo run build --filter=@btfp/scraper
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
