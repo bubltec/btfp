@@ -33,13 +33,19 @@ const SEVERITY_RANK: Record<Severity, number> = {
 /** Case/punctuation-insensitive form used for identity comparison. */
 export function normalizeThingName(name: string): string {
   if (typeof name !== 'string' || !name) return '';
-  return name
-    .normalize('NFKD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/['’]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+  try {
+    return name
+      .normalize('NFKD')
+      .replace(/\p{M}/gu, '')
+      .toLowerCase()
+      .replace(/['’]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  } catch {
+    // Legacy catalog rows can carry names that make normalize throw; skip them
+    // for matching instead of failing POST /contributions on a full-table scan.
+    return '';
+  }
 }
 
 /**
@@ -163,11 +169,28 @@ export function findDuplicateThing<T extends ThingIdentity>(
   existing: T[],
   candidate: ThingIdentity,
 ): T | undefined {
-  const matches = existing.filter((thing) => thingsMatch(thing, candidate));
+  const matches = existing.filter((thing) => {
+    try {
+      return thingsMatch(thing, candidate);
+    } catch {
+      return false;
+    }
+  });
   if (matches.length === 1) return matches[0];
   if (matches.length === 0) return undefined;
-  const candidatePrimary = primaryKey(candidate);
-  const exact = matches.filter((thing) => primaryKey(thing) === candidatePrimary);
+  let candidatePrimary: string;
+  try {
+    candidatePrimary = primaryKey(candidate);
+  } catch {
+    return undefined;
+  }
+  const exact = matches.filter((thing) => {
+    try {
+      return primaryKey(thing) === candidatePrimary;
+    } catch {
+      return false;
+    }
+  });
   return exact.length === 1 ? exact[0] : undefined;
 }
 
