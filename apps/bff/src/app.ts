@@ -5,6 +5,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import fastifyCookie from '@fastify/cookie';
 import { AppModule } from './app.module.js';
+import { StageErrorFilter } from './filters/stage-error.filter.js';
 
 export async function createApp(adapter: FastifyAdapter): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
@@ -37,6 +38,9 @@ export async function createApp(adapter: FastifyAdapter): Promise<NestFastifyApp
   // sitemap.xml/robots.txt are excluded so they can live at the site root instead of under /api.
   app.setGlobalPrefix('api', { exclude: ['sitemap.xml', 'robots.txt'] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  if (process.env.STAGE !== 'prod') {
+    app.useGlobalFilters(new StageErrorFilter());
+  }
 
   const openApiConfig = new DocumentBuilder()
     .setTitle('badthingsforpets.com API')

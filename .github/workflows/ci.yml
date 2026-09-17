@@ -29,5 +29,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # test catches BFF ValidationPipe / contribution regressions that
-      # typecheck+build miss. @btfp/e2e is deploy-only (Playwright + live dev + AWS).
+      # typecheck+build miss (see apps/bff/src/contributions/contributions.pipeline.spec.ts).
+      # Live dev Playwright is deploy-only — run `pnpm --filter @btfp/e2e test:dev` locally
+      # before merging submit/auth changes; PR CI has no AWS/Basic Auth.
       - run: pnpm turbo run typecheck build test --filter=!@btfp/e2e

@@ -113,6 +113,13 @@ against the freshly-deployed `https://dev.badthingsforpets.com` after every push
 gating promotion to prod — see [docs/ci-cd.md](./ci-cd.md) for the full pipeline. Same
 invocation documented above, just automated instead of run by hand.
 
+**Why this is not caught by local `pnpm test` or PR CI:** `.github/workflows/ci.yml` runs
+`turbo test` with `@btfp/e2e` excluded (no AWS/Basic Auth on PRs). BFF unit tests mock
+DynamoDB and never hit the deployed Lambda. Default `pnpm test` in `apps/e2e` targets
+`http://localhost:5173`, not dev. Before merging auth/submit flow changes, run
+`pnpm --filter @btfp/e2e test:dev` or at least `pnpm --filter @btfp/e2e repro:contributions`
+(with `infra/cdk/.env.deploy.local` or `BASIC_AUTH_*` set).
+
 Accepted tradeoff: the generated spec does a real `POST /submit` and a real email sign-up
 against dev's actual DynamoDB tables, so every CI run permanently adds to dev's data. Not
 cleaned up automatically — dev isn't a pristine/indexed dataset to begin with (see
