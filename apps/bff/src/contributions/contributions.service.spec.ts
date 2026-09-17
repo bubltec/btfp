@@ -1,10 +1,11 @@
+import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import { CreateContributionDto } from './dto/create-contribution.dto.js';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { ContributionsService } from './contributions.service.js';
-import type { CreateContributionDto } from './dto/create-contribution.dto.js';
 import type { SearchService } from '../search/search.service.js';
 
 const e2ePayload: CreateContributionDto = {
@@ -17,7 +18,32 @@ const e2ePayload: CreateContributionDto = {
   },
 };
 
+const pipe = new ValidationPipe({ whitelist: true, transform: true });
+
 describe('ContributionsService.propose', () => {
+  it('plainifies ValidationPipe class instances before PutCommand', async () => {
+    const db = mockClient(DynamoDBDocumentClient);
+    db.on(PutCommand).resolves({});
+
+    const dto = (await pipe.transform(e2ePayload, {
+      type: 'body',
+      metatype: CreateContributionDto,
+    })) as CreateContributionDto;
+
+    const service = new ContributionsService(
+      DynamoDBDocumentClient.from(new DynamoDBClient({})),
+      {} as never,
+      {} as never,
+      { findDuplicate: vi.fn().mockResolvedValue(undefined) } as unknown as SearchService,
+    );
+
+    await service.propose(dto, 'e2e-user');
+    const item = db.commandCalls(PutCommand)[0]?.args[0].input.Item as Record<string, unknown>;
+    const payload = item.payload as Record<string, unknown>;
+    expect(payload.constructor).toBe(Object);
+    expect((payload.petTypes as unknown[])[0]).toMatchObject({ petTypeId: 'dog' });
+  });
+
   it('writes the same DynamoDB item shape as the scraper (new thing, no duplicate)', async () => {
     const db = mockClient(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
@@ -43,6 +69,7 @@ describe('ContributionsService.propose', () => {
     expect(item.SK).toBe(`CONTRIB#${contribution.createdAt}#e2e-user`);
     expect(item.GSI2PK).toBe('STATUS#pending');
     expect(item.payload).toMatchObject({ name: 'Chocolate', thingTypeId: 'food' });
+    expect(item).not.toHaveProperty('thingId');
   });
 
   it('rejects a session with no contributor id', async () => {

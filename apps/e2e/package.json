@@ -6,6 +6,8 @@
   "scripts": {
     "generate": "tsx scripts/generate.ts",
     "test": "playwright test",
+    "test:dev": "bash scripts/run-against-dev.sh",
+    "repro:contributions": "bash scripts/run-against-dev.sh --api-only",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {

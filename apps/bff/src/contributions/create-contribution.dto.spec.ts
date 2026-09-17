@@ -33,4 +33,12 @@ describe('CreateContributionDto (ValidationPipe)', () => {
     expect(dto.payload.details?.notes).toContain('theobromine');
     expect(dto.payload.source).toContain('aspca.org');
   });
+
+  it('leaves payload as class instances (must be plainified before Dynamo writes)', async () => {
+    const dto = (await pipe.transform(e2eSubmitBody, {
+      type: 'body',
+      metatype: CreateContributionDto,
+    })) as CreateContributionDto;
+    expect(dto.payload.constructor.name).not.toBe('Object');
+  });
 });
