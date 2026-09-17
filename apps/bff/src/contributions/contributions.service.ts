@@ -1,4 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { instanceToPlain } from 'class-transformer';
 import { randomUUID } from 'node:crypto';
 import {
   GetCommand,
@@ -38,26 +39,34 @@ export class ContributionsService {
         ? normalizeLinkedThingId((await this.search.findDuplicate(dto.payload))?.id)
         : undefined;
     const existingId = linkedThingId ?? duplicateId;
+    // ValidationPipe leaves nested DTOs as class instances; Dynamo's
+    // marshaller rejects those unless convertClassInstanceToMap is enabled.
+    const payload = instanceToPlain(dto.payload) as Contribution['payload'];
     const contribution: Contribution = {
       id,
       thingId: existingId,
       contributorId: contributor,
       status: 'pending',
-      payload: dto.payload,
+      payload,
       createdAt: now,
     };
 
     const targetThingId = existingId ?? id;
+    // Document client on Lambda does not strip undefined attributes — a missing
+    // thingId on new submissions must be omitted, not set to undefined.
+    const item: Record<string, unknown> = {
+      ...contribution,
+      PK: `THING#${targetThingId}`,
+      SK: `CONTRIB#${now}#${contributor}`,
+      GSI2PK: 'STATUS#pending',
+      GSI2SK: `CONTRIB#${now}`,
+    };
+    if (existingId === undefined) delete item.thingId;
+
     await this.db.send(
       new PutCommand({
         TableName: CONTENT_TABLE_NAME,
-        Item: {
-          ...contribution,
-          PK: `THING#${targetThingId}`,
-          SK: `CONTRIB#${now}#${contributor}`,
-          GSI2PK: 'STATUS#pending',
-          GSI2SK: `CONTRIB#${now}`,
-        },
+        Item: item,
       }),
     );
 
