@@ -57,8 +57,13 @@ async function signInAndVerify(): Promise<string> {
   return cookies;
 }
 
-async function postContribution(cookies: string, name: string): Promise<void> {
+async function postContribution(
+  cookies: string,
+  name: string,
+  opts?: { thingId?: string },
+): Promise<void> {
   const body = {
+    ...(opts?.thingId ? { thingId: opts.thingId } : {}),
     payload: {
       name,
       thingTypeId: 'food',
@@ -83,5 +88,12 @@ for (const path of ['/auth/me', '/contributions/pending']) {
   console.log(`GET ${path} → ${res.status} ${(await res.text()).slice(0, 200)}`);
 }
 
+const pendingRes = await api('/contributions/pending', { headers: { Cookie: cookies } });
+const pending = (await pendingRes.json()) as { PK?: string }[];
+const existingThingId = pending[0]?.PK?.replace(/^THING#/, '');
+
 await postContribution(cookies, `E2E-unique-${Date.now()}`);
 await postContribution(cookies, 'Chocolate');
+if (existingThingId) {
+  await postContribution(cookies, `E2E-linked-${Date.now()}`, { thingId: existingThingId });
+}

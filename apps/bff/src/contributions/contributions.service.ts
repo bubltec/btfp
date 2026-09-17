@@ -41,7 +41,9 @@ export class ContributionsService {
     const existingId = linkedThingId ?? duplicateId;
     // ValidationPipe leaves nested DTOs as class instances; Dynamo's
     // marshaller rejects those unless convertClassInstanceToMap is enabled.
-    const payload = instanceToPlain(dto.payload) as Contribution['payload'];
+    const payload = JSON.parse(
+      JSON.stringify(instanceToPlain(dto.payload)),
+    ) as Contribution['payload'];
     const contribution: Contribution = {
       id,
       thingId: existingId,

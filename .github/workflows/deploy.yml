@@ -120,6 +120,12 @@ jobs:
       - run: pnpm --filter @btfp/e2e exec playwright install chromium
       - run: pnpm --filter @btfp/e2e exec playwright install-deps chromium
 
+      # BFF Lambda uses CodeDeploy CANARY_10PERCENT_5MINUTES on the `live`
+      # alias — deploy-dev returns before traffic finishes shifting. Running
+      # e2e too early hits the previous version and flakes (see #30).
+      - name: Wait for BFF canary shift
+        run: sleep 330
+
       # NestJS container cold start lands on the first real API hit after
       # deploy-dev. Warm it with a cheap read so e2e's email-sign-in POST
       # (DNS + Bedrock + SES) isn't competing with bootstrap for the 30s
