@@ -12,6 +12,10 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
   reporter: 'list',
+  // Deploy e2e runs immediately after a fresh Lambda deploy — the first
+  // request is a guaranteed cold start, sometimes flaky on its own. Retry
+  // in CI only; local runs against dev should fail on the first real bug.
+  retries: process.env.CI ? 2 : 0,
   use: {
     baseURL: BASE_URL,
     trace: 'retain-on-failure',
