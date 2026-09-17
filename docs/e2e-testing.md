@@ -27,6 +27,15 @@ pnpm test tests/generated/my-flow-name.spec.ts
 only needed against the deployed dev stage, which is Basic-Auth-locked (see
 [docs/infra.md](./infra.md)) — omit them for local or prod.
 
+To run the same spec CI uses against dev (after `pnpm secrets:sync dev`, or with
+`BASIC_AUTH_*` exported):
+
+```bash
+pnpm --filter @btfp/e2e test:dev
+# or a single file:
+pnpm --filter @btfp/e2e test:dev tests/generated/email-signin-submit-thing.spec.ts
+```
+
 ## How it works
 
 1. Launches a headless browser, navigates to a fixed set of routes (`/`, `/submit`,
