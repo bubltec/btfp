@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { BadRequestException } from '@nestjs/common';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
@@ -42,6 +43,39 @@ describe('ContributionsService.propose', () => {
     expect(item.SK).toBe(`CONTRIB#${contribution.createdAt}#e2e-user`);
     expect(item.GSI2PK).toBe('STATUS#pending');
     expect(item.payload).toMatchObject({ name: 'Chocolate', thingTypeId: 'food' });
+  });
+
+  it('rejects a session with no contributor id', async () => {
+    const service = new ContributionsService(
+      DynamoDBDocumentClient.from(new DynamoDBClient({})),
+      {} as never,
+      {} as never,
+      { findDuplicate: vi.fn() } as unknown as SearchService,
+    );
+    await expect(service.propose(e2ePayload, '  ')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('ignores a blank duplicate id and creates a new Thing partition', async () => {
+    const db = mockClient(DynamoDBDocumentClient);
+    db.on(PutCommand).resolves({});
+
+    const search = {
+      findDuplicate: vi
+        .fn()
+        .mockResolvedValue({ id: '   ', name: 'Chocolate', thingTypeId: 'food' }),
+    } as unknown as SearchService;
+
+    const service = new ContributionsService(
+      DynamoDBDocumentClient.from(new DynamoDBClient({})),
+      {} as never,
+      {} as never,
+      search,
+    );
+
+    const contribution = await service.propose(e2ePayload, 'e2e-user');
+    expect(contribution.thingId).toBeUndefined();
+    const item = db.commandCalls(PutCommand)[0]?.args[0].input.Item as Record<string, unknown>;
+    expect(item.PK).toBe(`THING#${contribution.id}`);
   });
 
   it('attaches to an existing Thing id when findDuplicate matches', async () => {

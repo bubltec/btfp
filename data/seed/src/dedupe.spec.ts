@@ -44,6 +44,18 @@ describe('thingsMatch', () => {
     expect(findDuplicateThing([broken, candidate], candidate)).toBe(candidate);
   });
 
+  it('does not throw when comparing against a catalog row with a toxic name', () => {
+    const candidate = thing({ id: 'c', name: 'Chocolate', thingTypeId: 'food' });
+    const broken = thing({
+      id: 'x',
+      name: '\uD800',
+      thingTypeId: 'food',
+      otherNames: ['\uD800'],
+    });
+    expect(() => thingsMatch(broken, candidate)).not.toThrow();
+    expect(() => findDuplicateThing([broken, candidate], candidate)).not.toThrow();
+  });
+
   it('ignores non-string alias entries instead of throwing', () => {
     const candidate = thing({ id: 'c', name: 'Chocolate', thingTypeId: 'food' });
     const broken = thing({

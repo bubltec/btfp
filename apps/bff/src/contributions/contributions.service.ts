@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
   GetCommand,
@@ -25,17 +25,23 @@ export class ContributionsService {
   ) {}
 
   async propose(dto: CreateContributionDto, contributorId: string): Promise<Contribution> {
+    const contributor = contributorId?.trim();
+    if (!contributor) {
+      throw new BadRequestException('Session is missing a contributor id — sign in again');
+    }
+
     const id = randomUUID();
     const now = new Date().toISOString();
-    const existingId =
-      dto.thingId ??
-      (dto.payload.name && dto.payload.thingTypeId
-        ? (await this.search.findDuplicate(dto.payload))?.id
-        : undefined);
+    const linkedThingId = normalizeLinkedThingId(dto.thingId);
+    const duplicateId =
+      !linkedThingId && dto.payload.name && dto.payload.thingTypeId
+        ? normalizeLinkedThingId((await this.search.findDuplicate(dto.payload))?.id)
+        : undefined;
+    const existingId = linkedThingId ?? duplicateId;
     const contribution: Contribution = {
       id,
       thingId: existingId,
-      contributorId,
+      contributorId: contributor,
       status: 'pending',
       payload: dto.payload,
       createdAt: now,
@@ -48,7 +54,7 @@ export class ContributionsService {
         Item: {
           ...contribution,
           PK: `THING#${targetThingId}`,
-          SK: `CONTRIB#${now}#${contributorId}`,
+          SK: `CONTRIB#${now}#${contributor}`,
           GSI2PK: 'STATUS#pending',
           GSI2SK: `CONTRIB#${now}`,
         },
@@ -148,4 +154,10 @@ export class ContributionsService {
 
     return thing;
   }
+}
+
+function normalizeLinkedThingId(id: string | undefined): string | undefined {
+  if (id == null) return undefined;
+  const trimmed = String(id).trim();
+  return trimmed || undefined;
 }

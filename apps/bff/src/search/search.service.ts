@@ -23,14 +23,20 @@ function matchesBreed(thing: Thing, breed: Breed): boolean {
 }
 
 /** Dynamo rows can predate schema tightening; keep scans from throwing in findDuplicate. */
-function sanitizeCatalogThing(thing: Thing): Thing {
+function sanitizeCatalogThing(thing: Thing & { PK?: string }): Thing {
+  const { PK, ...rest } = thing;
+  const idFromPk =
+    typeof PK === 'string' && PK.startsWith('THING#') ? PK.slice('THING#'.length) : undefined;
+  const id = typeof rest.id === 'string' && rest.id.trim() ? rest.id.trim() : (idFromPk ?? rest.id);
   return {
-    ...thing,
+    ...rest,
+    id: typeof id === 'string' ? id : '',
     name: typeof thing.name === 'string' ? thing.name : '',
     thingTypeId: typeof thing.thingTypeId === 'string' ? thing.thingTypeId : 'unknown',
     otherNames: Array.isArray(thing.otherNames)
       ? thing.otherNames.filter((name): name is string => typeof name === 'string')
       : [],
+    petTypes: Array.isArray(thing.petTypes) ? thing.petTypes : [],
   };
 }
 
@@ -136,7 +142,13 @@ export class SearchService {
         }),
       );
       items.push(
-        ...(result.Items ?? []).map((item) => sanitizeCatalogThing(stripDynamoKeys(item) as Thing)),
+        ...(result.Items ?? []).map((item) => {
+          const pk = (item as { PK?: string }).PK;
+          return sanitizeCatalogThing({
+            ...(stripDynamoKeys(item) as Thing),
+            PK: pk,
+          });
+        }),
       );
       lastKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
     } while (lastKey);

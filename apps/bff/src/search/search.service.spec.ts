@@ -6,6 +6,35 @@ import { SearchService } from './search.service.js';
 import type { BreedsService } from '../breeds/breeds.service.js';
 
 describe('SearchService.findDuplicate', () => {
+  it('falls back to PK when META rows are missing id', async () => {
+    const db = mockClient(DynamoDBDocumentClient);
+    db.on(ScanCommand).resolves({
+      Items: [
+        {
+          PK: 'THING#from-pk',
+          SK: 'META',
+          name: 'Chocolate / cocoa',
+          thingTypeId: 'food',
+          otherNames: [],
+          petTypes: [],
+          details: {},
+          source: 'seed',
+          verified: true,
+          createdAt: '2020-01-01T00:00:00.000Z',
+          updatedAt: '2020-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    const service = new SearchService(DynamoDBDocumentClient.from(new DynamoDBClient({})), {
+      getById: vi.fn(),
+    } as unknown as BreedsService);
+
+    await expect(
+      service.findDuplicate({ name: 'Chocolate', thingTypeId: 'food' }),
+    ).resolves.toMatchObject({ id: 'from-pk' });
+  });
+
   it('does not throw when the catalog contains malformed Thing rows', async () => {
     const db = mockClient(DynamoDBDocumentClient);
     db.on(ScanCommand).resolves({
