@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { DynamoModule } from '@bubltec/mycota-dynamo';
+import { BffDynamoModule } from './dynamo/bff-dynamo.module.js';
 import { MycotaAuthModule } from '@bubltec/mycota-auth';
 import { ProfessionalVerificationModule } from '@bubltec/mycota-professional-verification';
 import { PetTypesModule } from './pet-types/pet-types.module.js';
@@ -17,7 +17,7 @@ import { buildMycotaAuthConfig } from './mycota-config.js';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    DynamoModule,
+    BffDynamoModule,
     MycotaAuthModule.forRootAsync({ useFactory: buildMycotaAuthConfig }),
     SearchModule,
     PetTypesModule,

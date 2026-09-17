@@ -42,6 +42,7 @@ describe('ContributionsService.propose', () => {
     const payload = item.payload as Record<string, unknown>;
     expect(payload.constructor).toBe(Object);
     expect((payload.petTypes as unknown[])[0]).toMatchObject({ petTypeId: 'dog' });
+    expect((payload.petTypes as unknown[])[0]?.constructor).toBe(Object);
   });
 
   it('writes the same DynamoDB item shape as the scraper (new thing, no duplicate)', async () => {
