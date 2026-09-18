@@ -86,6 +86,18 @@ Two things worth knowing about what this automation trades off:
   (the same plant listed under every common name, ASPCA vs vetmeds spelling variants) are
   collapsed before write; ids that existed only as the discarded duplicate are deleted so a
   re-seed doesn't leave both the canonical row and the old extra in the table.
+- **Renamed/split source items are reconciled too, not just same-run duplicates.** The
+  `discarded` list from `dedupeThings` only covers rows collapsed *within the current run* — it
+  says nothing about a row that existed from a *previous* run but whose source item was renamed,
+  split, or removed since then (exactly what happened when the "Onions, garlic, leeks, chives,
+  shallots (Allium spp.)" combo entry was split into per-species rows: the old combo name simply
+  stops appearing in `uniqueThings`, so it's never in `discarded` either). Left alone, that old
+  row sits in the table forever next to its replacement. `run.ts` additionally scans the table for
+  existing `THING#…` rows with no `contributorId` (i.e. still exactly what a prior seed run wrote,
+  never touched by the contributions/approve flow) whose id isn't in this run's output, and deletes
+  those too. Rows that went through moderation — a brand-new contributor submission, or an
+  approved edit merged into an existing seed row — always have `contributorId` set and are never
+  touched by this cleanup, even if their id happens to match a stable id this run no longer emits.
 - **Scoped IAM grant.** `infra/cdk/lib/ci-stack.ts`'s GitHub Actions deploy role is otherwise kept
   to `sts:AssumeRole` on CDK's own bootstrap roles only (see that file's comments) — seeding is
   the one exception, a narrow `dynamodb:BatchWriteItem` grant on exactly the prod content table.

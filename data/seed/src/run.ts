@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { BatchWriteCommand, DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { BatchWriteCommand, DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import {
   dedupeThings,
   type Breed,
@@ -24,7 +24,7 @@ import {
 } from './transform.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CONTENT_TABLE_NAME = process.env.CONTENT_TABLE_NAME ?? 'btfp-dev-content';
+export const CONTENT_TABLE_NAME = process.env.CONTENT_TABLE_NAME ?? 'btfp-dev-content';
 const BATCH_SIZE = 25;
 
 function endpointFromArgs(): string | undefined {
@@ -61,6 +61,46 @@ async function batchDelete(db: DynamoDBDocumentClient, keys: { PK: string; SK: s
       }),
     );
   }
+}
+
+/**
+ * Rows this run's `uniqueThings` no longer produce — e.g. a source item got
+ * renamed or split since the last seed run — aren't caught by `discarded`
+ * (that only covers duplicates collapsed *within this run*). Left alone,
+ * they'd sit in the table forever alongside their replacement, which is
+ * exactly the "old combo entry still shows up next to the new split ones"
+ * bug this was seeding to fix. Only orphans `contributorId`-less seed rows
+ * are deleted — anything that went through the contributions/approve flow
+ * (new or merged into an existing seed row) has `contributorId` set and is
+ * left alone even if its id happens to collide with a stable id this run
+ * no longer emits.
+ */
+export async function findOrphanedSeedThingKeys(
+  db: DynamoDBDocumentClient,
+  keepIds: Set<string>,
+): Promise<{ PK: string; SK: string }[]> {
+  const orphans: { PK: string; SK: string }[] = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const result = await db.send(
+      new ScanCommand({
+        TableName: CONTENT_TABLE_NAME,
+        FilterExpression: 'SK = :meta AND begins_with(PK, :thingPrefix)',
+        ExpressionAttributeValues: { ':meta': 'META', ':thingPrefix': 'THING#' },
+        ExclusiveStartKey: lastKey,
+      }),
+    );
+    for (const item of result.Items ?? []) {
+      const pk = (item as { PK?: string }).PK;
+      const id = typeof pk === 'string' ? pk.slice('THING#'.length) : undefined;
+      const contributorId = (item as { contributorId?: string }).contributorId;
+      if (id && !contributorId && !keepIds.has(id)) {
+        orphans.push({ PK: pk!, SK: 'META' });
+      }
+    }
+    lastKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (lastKey);
+  return orphans;
 }
 
 const petTypeItem = (petType: PetType) => ({ ...petType, PK: `PETTYPE#${petType.id}`, SK: 'META' });
@@ -140,17 +180,32 @@ async function main() {
   await batchWrite(db, THING_TYPES.map(thingTypeItem));
   await batchWrite(db, breeds.map(breedItem));
   await batchWrite(db, uniqueThings.map(thingItem));
-  if (discarded.length > 0) {
-    await batchDelete(
-      db,
-      discarded.map((thing) => ({ PK: `THING#${thing.id}`, SK: 'META' })),
+
+  const keepIds = new Set(uniqueThings.map((thing) => thing.id));
+  const discardedKeys = discarded.map((thing) => ({ PK: `THING#${thing.id}`, SK: 'META' }));
+  const orphanedKeys = await findOrphanedSeedThingKeys(db, keepIds);
+  const deleteKeys = [
+    ...discardedKeys,
+    // discarded rows already covered above; avoid double-listing the same PK
+    ...orphanedKeys.filter((key) => !discardedKeys.some((d) => d.PK === key.PK)),
+  ];
+  if (deleteKeys.length > 0) {
+    console.log(
+      `Deleting ${discardedKeys.length} duplicates collapsed this run + ` +
+        `${deleteKeys.length - discardedKeys.length} orphaned rows from prior runs ` +
+        `(renamed/split/removed source items) from ${CONTENT_TABLE_NAME}`,
     );
+    await batchDelete(db, deleteKeys);
   }
 
   console.log('Done.');
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exitCode = 1;
-});
+// Guard so importing this module's exports (findOrphanedSeedThingKeys,
+// CONTENT_TABLE_NAME) from a test doesn't also fire off a real seed run.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  });
+}
