@@ -29,7 +29,16 @@ describe('looksLikeComboName', () => {
 
   it('does not flag ordinary single-item names', () => {
     expect(looksLikeComboName('Garlic')).toBe(false);
-    expect(looksLikeComboName('Chocolate / cocoa')).toBe(false);
+    expect(looksLikeComboName('Shallot')).toBe(false);
+  });
+
+  it('flags slash-separated lists too, even though not every match is a real split', () => {
+    // Intentionally over-selects — "Grapes / raisins / currants / sultanas" is a
+    // real combo, but "Chocolate / cocoa" (same substance, not a list of
+    // distinct items) also matches. That's fine: this is a pre-filter for a
+    // human/Bedrock review step, not the final split decision.
+    expect(looksLikeComboName('Grapes / raisins / currants / sultanas')).toBe(true);
+    expect(looksLikeComboName('Chocolate / cocoa')).toBe(true);
   });
 });
 

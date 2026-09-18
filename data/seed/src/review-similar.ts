@@ -28,8 +28,9 @@ const MIN_LIST_MEMBERS = 2;
 export function looksLikeComboName(name: string): boolean {
   const stripped = name.replace(/\([^)]*\)/g, '').trim();
   const commaParts = stripped.split(',').filter((part) => part.trim().length > 0);
+  const slashParts = stripped.split('/').filter((part) => part.trim().length > 0);
   const hasAnd = /\band\b/i.test(stripped) || stripped.includes('&');
-  return commaParts.length >= MIN_LIST_MEMBERS || hasAnd;
+  return commaParts.length >= MIN_LIST_MEMBERS || slashParts.length >= MIN_LIST_MEMBERS || hasAnd;
 }
 
 function buildPrompt(candidate: Thing, existingNames: string[]): string {

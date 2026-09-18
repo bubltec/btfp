@@ -100,6 +100,35 @@ row hid that garlic is 3–5x more toxic per gram than the others, and matching 
 separate `"Onions, Garlic and Chives"` entry just merged two combo rows into one bigger combo
 row instead of surfacing that per-species (per-source) split.
 
+A full sweep of the current local seed sources for this pattern turned up over a dozen more
+combo rows (`"Grapes / raisins / currants / sultanas"`, `"Raw/undercooked meat, eggs, bones"`,
+`"Vitamin D3 (cholecalciferol) supplements & some rodenticides"`, `"Beta-blockers & calcium
+channel blockers"`, `"String, yarn, ribbon, dental floss, tinsel (linear foreign bodies)"`,
+`"Pseudoephedrine & Phenylephrine"`, `"Ibuprofen & Naproxen"`, `"Cannabis / THC edibles"`,
+`"Moldy food / compost"`, `"Salt / homemade play dough / paintballs"`) — each split into its
+individual named items, now that `dedupeThings`' merge no longer drops a source's data on an
+id collision (see the fix in `packages/shared-types/src/dedupe.ts`, below). Not every
+`&`/`/`/`,`-containing name is a real combo, though — `"Chocolate / cocoa"`, `"Ibuprofen
+(Advil, Motrin)"`, `"Glue / adhesives"`, `"Nicotine (cigarettes, vape liquid, patches, gum)"`
+are one substance/item under multiple names or brand listings, not a bundle of distinct
+things, and are deliberately left as a single row. The judgment call each time: would a pet
+owner search for these terms *separately*, and does lumping them together hide a real
+difference (potency, severity, product category) between them? If yes to either, split; if
+the "combo" is really just synonyms or brand names for one thing, leave it — that's also why
+this is a curation aid a human reviews (or Bedrock analyzes) rather than an automatic rule; a
+plain word-list heuristic can't reliably tell "Onions, garlic, leeks..." apart from "Grapes /
+raisins" (both real splits) from "Chocolate / cocoa" or "Ibuprofen (Advil, Motrin)" (not).
+
+One more failure mode worth knowing: splitting a combo entry from source A only reunites with
+the matching row from source B if the two rows agree on `thingTypeId`. `"Nicotine & Tobacco"`
+from vetmeds came in tagged `thingTypeId: 'drug'` (vetmeds categorizes it under "Illicit &
+Recreational Drugs"), while ASPCA's existing `"Nicotine (cigarettes, vape liquid, patches,
+gum)"` sits under `'medication'` (this dataset's raw `medications` array hardcodes that
+type) — splitting the vetmeds row without reconciling the type would have produced two
+same-substance rows sitting side by side, unmerged, which is exactly the bug this whole
+exercise is trying to catch. Check for this whenever a split's name would otherwise
+token-match an existing row.
+
 `pnpm --filter @btfp/seed review:similar` (`data/seed/src/review-similar-run.ts`) scans the
 local seed source files for combo-looking names (comma lists, "X and Y", "X & Y" — see
 `looksLikeComboName` in `data/seed/src/review-similar.ts`) and asks Bedrock, per candidate,
