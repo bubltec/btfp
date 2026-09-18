@@ -30,6 +30,9 @@ export class ContributionsService {
     if (!contributor) {
       throw new BadRequestException('Session is missing a contributor id — sign in again');
     }
+    if (!dto.payload?.name || !dto.payload?.thingTypeId) {
+      throw new BadRequestException('payload.name and payload.thingTypeId are required');
+    }
 
     const id = randomUUID();
     const now = new Date().toISOString();

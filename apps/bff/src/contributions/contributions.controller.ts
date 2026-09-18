@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ContributionsService } from './contributions.service.js';
 import { VerifiedGuard, CurrentUser, type AuthenticatedUser } from '@bubltec/mycota-auth';
-import type { CreateContributionDto } from './dto/create-contribution.dto.js';
+// Value import — `import type` erases the class before emitDecoratorMetadata runs,
+// so ValidationPipe sees paramtypes [Function, Object] and never transforms `payload`.
+import { CreateContributionDto } from './dto/create-contribution.dto.js';
 
 @Controller('contributions')
 export class ContributionsController {
