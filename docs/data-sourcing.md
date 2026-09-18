@@ -119,6 +119,22 @@ this is a curation aid a human reviews (or Bedrock analyzes) rather than an auto
 plain word-list heuristic can't reliably tell "Onions, garlic, leeks..." apart from "Grapes /
 raisins" (both real splits) from "Chocolate / cocoa" or "Ibuprofen (Advil, Motrin)" (not).
 
+A live Bedrock run of `review:similar` after the manual sweep above confirmed most of it and
+found a few more worth acting on: `"Underwear / elastic waistband clothing"` →
+Underwear + Waistband clothing, `"Repeated stair climbing or jumping on/off furniture"` →
+Stair climbing + Jumping on/off furniture, and `"Glue / adhesives"` → split by chemistry
+(super glue/cyanoacrylate, wood glue, epoxy, rubber cement — then a follow-up pass further
+split wood glue into standard PVA vs. polyurethane-expanding, since the expanding kind is a
+genuinely more severe obstruction risk, not just a synonym). It also raised some it got wrong
+or that were already handled: `"Ice melt / rock salt de-icing products"` was flagged twice as
+unmerged with an existing `"De-Icing Salts"` entry, but the pipeline already merges them (their
+names token-match); `"Alkalis/Bases"`'s own proposed split contradicted its own reasoning
+("splitting into two identical entries would be redundant"); and `"Dog flea/tick spot-on
+products applied to cats"` is a specific incident scenario worth keeping as one entry even
+though it overlaps a separate generic `"Permethrin"` entry (a cross-reference note was added
+instead of a split). Bedrock's overlap/merge claims are a lead to check against the actual
+`dedupeThings` output, not a fact — it can't see whether two rows already merge at runtime.
+
 One more failure mode worth knowing: splitting a combo entry from source A only reunites with
 the matching row from source B if the two rows agree on `thingTypeId`. `"Nicotine & Tobacco"`
 from vetmeds came in tagged `thingTypeId: 'drug'` (vetmeds categorizes it under "Illicit &

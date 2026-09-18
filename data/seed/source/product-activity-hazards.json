@@ -52,7 +52,7 @@
    ],
    "severity": "severe",
    "hazard": "High-concentration (45-65%) permethrin spot-on products made for dogs are highly toxic to cats, which lack the enzyme needed to detoxify permethrin. Cats can also be poisoned secondhand by grooming a treated dog. Causes tremors, seizures, and hyperthermia; there is no antidote, only supportive care.",
-   "notes": "Low-concentration (~2%) permethrin sprays labeled for cats are not considered toxic to cats at that concentration.",
+   "notes": "Low-concentration (~2%) permethrin sprays labeled for cats are not considered toxic to cats at that concentration. See the general \"Permethrin\" entry for the toxin itself outside this specific dog-product-on-cat scenario.",
    "source": "ASPCA Professional; veterinary literature",
    "sourceUrl": "https://www.aspcapro.org/sites/default/files/d-veccs_april00_0.pdf"
   },
@@ -109,7 +109,7 @@
    "sourceUrl": "https://vcahospitals.com/know-your-pet/ingestion-of-foreign-bodies-in-dogs"
   },
   {
-   "name": "Underwear / elastic waistband clothing",
+   "name": "Underwear",
    "thingType": "object",
    "petTypes": [
     "dog"
@@ -121,13 +121,39 @@
    "sourceUrl": "https://www.signalpet.com/linear-foreign-bodies/"
   },
   {
-   "name": "Repeated stair climbing or jumping on/off furniture",
+   "name": "Waistband clothing (leggings, sweatpants, tights)",
+   "thingType": "object",
+   "petTypes": [
+    "dog"
+   ],
+   "severity": "severe",
+   "hazard": "Carries the same obstruction risk as socks, plus an added danger from the elastic waistband: it can act as a 'linear foreign body' — anchoring at one end (often under the tongue or further down the GI tract) while the intestines try to move the rest along, bunching (plicating) the gut around it. This can saw through the intestinal wall and cause a life-threatening perforation and infection.",
+   "notes": "If you see string-like material looped under your dog's tongue, do not pull on it — this can worsen internal damage. Get to a vet immediately either way, even before symptoms appear.",
+   "source": "SignalPET; Veterinary Partner (VIN); VCA Animal Hospitals",
+   "sourceUrl": "https://www.signalpet.com/linear-foreign-bodies/"
+  },
+  {
+   "name": "Stair climbing",
    "otherNames": [
-    "Stairs",
-    "Stair climbing",
-    "Jumping on furniture",
-    "IVDD",
-    "Intervertebral disc disease"
+    "Stairs"
+   ],
+   "thingType": "activity",
+   "petTypes": [
+    "dog"
+   ],
+   "breedTraits": [
+    "long-backed"
+   ],
+   "severity": "moderate",
+   "hazard": "In chondrodystrophic (long-backed, short-legged) breeds, repeated stair use and jumping on/off furniture put repetitive strain on the spine, raising the risk of intervertebral disc disease (IVDD) — herniated or ruptured discs that can cause pain, wobbliness, or hind-limb paralysis. Dachshunds have a relative IVDD risk roughly 10-12 times higher than other breeds.",
+   "notes": "Ramps or steps for couches/beds, and carrying the dog up and down stairs, are common ways owners reduce this risk day to day.",
+   "source": "DachsLife 2015 (PMC); AKC Canine Health Foundation",
+   "sourceUrl": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5097381/"
+  },
+  {
+   "name": "Jumping on/off furniture",
+   "otherNames": [
+    "Jumping on furniture"
    ],
    "thingType": "activity",
    "petTypes": [
