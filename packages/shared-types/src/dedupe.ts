@@ -206,7 +206,12 @@ export function dedupeThings(things: Thing[]): DedupeResult {
     const canonical = pickCanonical(group);
     let merged = canonical;
     for (const thing of group) {
-      if (thing.id === canonical.id) continue;
+      // Reference equality, not `.id` — stableId is a hash of thingTypeId+name,
+      // so two rows from different sources for the same item (this is exactly
+      // the multi-source-merge case) legitimately collide on id. Comparing by
+      // id here would skip both as "the canonical" and silently drop the
+      // non-canonical row's data instead of merging it in.
+      if (thing === canonical) continue;
       merged = mergeThings(merged, thing);
       discarded.push(thing);
     }

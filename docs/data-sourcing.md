@@ -90,6 +90,37 @@ Two things worth knowing about what this automation trades off:
   to `sts:AssumeRole` on CDK's own bootstrap roles only (see that file's comments) — seeding is
   the one exception, a narrow `dynamodb:BatchWriteItem` grant on exactly the prod content table.
 
+## Bedrock-assisted similarity review
+
+Deterministic dedupe (`dedupeThings` in `packages/shared-types/src/dedupe.ts`) is good at
+collapsing exact/near-exact name matches from overlapping sources, but it can't tell that a
+single row is secretly a *list*. The ASPCA dataset's `"Onions, garlic, leeks, chives, shallots
+(Allium spp.)"` food entry is the motivating example: five distinct species lumped into one
+row hid that garlic is 3–5x more toxic per gram than the others, and matching against vetmeds'
+separate `"Onions, Garlic and Chives"` entry just merged two combo rows into one bigger combo
+row instead of surfacing that per-species (per-source) split.
+
+`pnpm --filter @btfp/seed review:similar` (`data/seed/src/review-similar-run.ts`) scans the
+local seed source files for combo-looking names (comma lists, "X and Y", "X & Y" — see
+`looksLikeComboName` in `data/seed/src/review-similar.ts`) and asks Bedrock, per candidate,
+whether it actually bundles multiple distinct items and which existing catalog rows overlap
+with it. It prints a report; **it does not rewrite anything**, same human-review requirement as
+the rest of this doc — a maintainer reads the suggestions and edits the source JSON by hand
+(split the combo row into individual entries, each carrying its own severity/details, letting
+`dedupeThings` do its normal job of merging same-named rows across sources once they're
+atomic). Requires Bedrock access from your local AWS credentials, same as `apps/e2e/scripts/
+generate.ts`'s local Bedrock use — no additional IAM setup needed for a personal AWS profile
+with `bedrock:InvokeModel`.
+
+This is a curation aid to run periodically (e.g. after adding a new source or before a big
+reseed), not a step in `seed:local`/`run.ts` — running Bedrock against every seed on every
+local seed would be slow, costly, and, per the human-review philosophy above, a Bedrock
+"split this" call is a strong-enough claim about clinical content that it belongs in front of
+a person, not wired into the write path (contribution write path also intentionally keeps
+`findDuplicateThing`'s deterministic matching, not Bedrock, for the same reason — a hallucinated
+auto-link on `POST /contributions` linking or un-linking a submission would be worse than the
+duplicate this is meant to catch).
+
 ## Expanding coverage
 
 Deliberately **not** proposing broad automated scraping here — most veterinary/poison-control

@@ -376,6 +376,22 @@ describe('local seed datasets', () => {
         (t) => t.thingTypeId === 'food' && /chocolate/i.test(`${t.name} ${t.otherNames.join(' ')}`),
       );
       expect(chocolate).toHaveLength(1);
+
+      // Regression: "Onions, garlic, leeks, chives, shallots (Allium spp.)" was
+      // a combo entry hiding that garlic is more toxic per gram than the other
+      // Allium species — it's split into individual food rows in the source
+      // data now, plus a genus-level row for unidentified Allium plants. Each
+      // named species must survive as its own row (not re-collapsed by name
+      // overlap with the genus row), and garlic must carry 'severe' on its own.
+      const foodByName = (name: string) =>
+        kept.find((t) => t.thingTypeId === 'food' && t.name.toLowerCase() === name.toLowerCase());
+      expect(kept.some((t) => /onions?,\s*garlic/i.test(t.name))).toBe(false);
+      const onion = foodByName('Onion');
+      const garlic = foodByName('Garlic');
+      expect(onion).toBeDefined();
+      expect(garlic).toBeDefined();
+      expect(onion?.id).not.toBe(garlic?.id);
+      expect(garlic?.petTypes.find((p) => p.petTypeId === 'dog')?.severity).toBe('severe');
     },
   );
 });
