@@ -376,6 +376,48 @@ describe('local seed datasets', () => {
         (t) => t.thingTypeId === 'food' && /chocolate/i.test(`${t.name} ${t.otherNames.join(' ')}`),
       );
       expect(chocolate).toHaveLength(1);
+
+      // Regression: "Onions, garlic, leeks, chives, shallots (Allium spp.)" was
+      // a combo entry hiding that garlic is more toxic per gram than the other
+      // Allium species — it's split into individual food rows in the source
+      // data now, plus a genus-level row for unidentified Allium plants. Each
+      // named species must survive as its own row (not re-collapsed by name
+      // overlap with the genus row), and garlic must carry 'severe' on its own.
+      const foodByName = (name: string) =>
+        kept.find((t) => t.thingTypeId === 'food' && t.name.toLowerCase() === name.toLowerCase());
+      expect(kept.some((t) => /onions?,\s*garlic/i.test(t.name))).toBe(false);
+      const onion = foodByName('Onion');
+      const garlic = foodByName('Garlic');
+      expect(onion).toBeDefined();
+      expect(garlic).toBeDefined();
+      expect(onion?.id).not.toBe(garlic?.id);
+      expect(garlic?.petTypes.find((p) => p.petTypeId === 'dog')?.severity).toBe('severe');
+
+      // Same sweep for the other combo entries found alongside Allium: each
+      // named item gets its own row, and where the same item existed under two
+      // different source rows (ASPCA + vetmeds), the split rows re-merge so
+      // neither source's detail is stranded on an orphaned combo row.
+      const grapes = foodByName('Grapes');
+      const raisins = foodByName('Raisins');
+      expect(grapes).toBeDefined();
+      expect(raisins).toBeDefined();
+      expect(grapes?.id).not.toBe(raisins?.id);
+      // "Ibuprofen & Naproxen" (vetmeds) must not survive as a third orphaned
+      // row alongside the two existing ASPCA rows it was split to complement.
+      expect(kept.some((t) => t.name === 'Ibuprofen & Naproxen')).toBe(false);
+      const ibuprofen = kept.find((t) => /^Ibuprofen\b/.test(t.name));
+      expect(ibuprofen?.details.clinicalSigns).toBeTruthy(); // merged in from vetmeds
+      expect(ibuprofen?.details.dose_concern_mg_per_kg).toBeTruthy(); // kept from ASPCA
+      // "Nicotine & Tobacco" (vetmeds, thingTypeId 'drug' in the raw source) must
+      // land on the same thingTypeId as the existing ASPCA "Nicotine (...)" row
+      // (thingTypeId 'medication') so the two merge instead of sitting side by
+      // side as an unmerged near-duplicate — a mismatched thingTypeId between
+      // sources for the same substance is exactly the kind of split this file
+      // is meant to catch, not just a name mismatch.
+      const nicotine = kept.filter((t) => /^Nicotine\b/.test(t.name));
+      expect(nicotine).toHaveLength(1);
+      expect(nicotine[0]?.details.clinicalSigns).toBeTruthy();
+      expect(nicotine[0]?.details.dose_concern_mg_per_kg).toBeTruthy();
     },
   );
 });

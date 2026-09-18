@@ -90,6 +90,66 @@ Two things worth knowing about what this automation trades off:
   to `sts:AssumeRole` on CDK's own bootstrap roles only (see that file's comments) — seeding is
   the one exception, a narrow `dynamodb:BatchWriteItem` grant on exactly the prod content table.
 
+## Bedrock-assisted similarity review
+
+Deterministic dedupe (`dedupeThings` in `packages/shared-types/src/dedupe.ts`) is good at
+collapsing exact/near-exact name matches from overlapping sources, but it can't tell that a
+single row is secretly a *list*. The ASPCA dataset's `"Onions, garlic, leeks, chives, shallots
+(Allium spp.)"` food entry is the motivating example: five distinct species lumped into one
+row hid that garlic is 3–5x more toxic per gram than the others, and matching against vetmeds'
+separate `"Onions, Garlic and Chives"` entry just merged two combo rows into one bigger combo
+row instead of surfacing that per-species (per-source) split.
+
+A full sweep of the current local seed sources for this pattern turned up over a dozen more
+combo rows (`"Grapes / raisins / currants / sultanas"`, `"Raw/undercooked meat, eggs, bones"`,
+`"Vitamin D3 (cholecalciferol) supplements & some rodenticides"`, `"Beta-blockers & calcium
+channel blockers"`, `"String, yarn, ribbon, dental floss, tinsel (linear foreign bodies)"`,
+`"Pseudoephedrine & Phenylephrine"`, `"Ibuprofen & Naproxen"`, `"Cannabis / THC edibles"`,
+`"Moldy food / compost"`, `"Salt / homemade play dough / paintballs"`) — each split into its
+individual named items, now that `dedupeThings`' merge no longer drops a source's data on an
+id collision (see the fix in `packages/shared-types/src/dedupe.ts`, below). Not every
+`&`/`/`/`,`-containing name is a real combo, though — `"Chocolate / cocoa"`, `"Ibuprofen
+(Advil, Motrin)"`, `"Glue / adhesives"`, `"Nicotine (cigarettes, vape liquid, patches, gum)"`
+are one substance/item under multiple names or brand listings, not a bundle of distinct
+things, and are deliberately left as a single row. The judgment call each time: would a pet
+owner search for these terms *separately*, and does lumping them together hide a real
+difference (potency, severity, product category) between them? If yes to either, split; if
+the "combo" is really just synonyms or brand names for one thing, leave it — that's also why
+this is a curation aid a human reviews (or Bedrock analyzes) rather than an automatic rule; a
+plain word-list heuristic can't reliably tell "Onions, garlic, leeks..." apart from "Grapes /
+raisins" (both real splits) from "Chocolate / cocoa" or "Ibuprofen (Advil, Motrin)" (not).
+
+One more failure mode worth knowing: splitting a combo entry from source A only reunites with
+the matching row from source B if the two rows agree on `thingTypeId`. `"Nicotine & Tobacco"`
+from vetmeds came in tagged `thingTypeId: 'drug'` (vetmeds categorizes it under "Illicit &
+Recreational Drugs"), while ASPCA's existing `"Nicotine (cigarettes, vape liquid, patches,
+gum)"` sits under `'medication'` (this dataset's raw `medications` array hardcodes that
+type) — splitting the vetmeds row without reconciling the type would have produced two
+same-substance rows sitting side by side, unmerged, which is exactly the bug this whole
+exercise is trying to catch. Check for this whenever a split's name would otherwise
+token-match an existing row.
+
+`pnpm --filter @btfp/seed review:similar` (`data/seed/src/review-similar-run.ts`) scans the
+local seed source files for combo-looking names (comma lists, "X and Y", "X & Y" — see
+`looksLikeComboName` in `data/seed/src/review-similar.ts`) and asks Bedrock, per candidate,
+whether it actually bundles multiple distinct items and which existing catalog rows overlap
+with it. It prints a report; **it does not rewrite anything**, same human-review requirement as
+the rest of this doc — a maintainer reads the suggestions and edits the source JSON by hand
+(split the combo row into individual entries, each carrying its own severity/details, letting
+`dedupeThings` do its normal job of merging same-named rows across sources once they're
+atomic). Requires Bedrock access from your local AWS credentials, same as `apps/e2e/scripts/
+generate.ts`'s local Bedrock use — no additional IAM setup needed for a personal AWS profile
+with `bedrock:InvokeModel`.
+
+This is a curation aid to run periodically (e.g. after adding a new source or before a big
+reseed), not a step in `seed:local`/`run.ts` — running Bedrock against every seed on every
+local seed would be slow, costly, and, per the human-review philosophy above, a Bedrock
+"split this" call is a strong-enough claim about clinical content that it belongs in front of
+a person, not wired into the write path (contribution write path also intentionally keeps
+`findDuplicateThing`'s deterministic matching, not Bedrock, for the same reason — a hallucinated
+auto-link on `POST /contributions` linking or un-linking a submission would be worse than the
+duplicate this is meant to catch).
+
 ## Expanding coverage
 
 Deliberately **not** proposing broad automated scraping here — most veterinary/poison-control

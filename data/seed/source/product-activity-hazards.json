@@ -1,122 +1,237 @@
 {
-  "metadata": {
-    "title": "Curated product, activity, and object hazards for pets",
-    "compiled": "2026-07-19",
-    "compiled_by": "Manually researched and summarized from ASPCA, AVMA, Pet Poison Helpline, CPSC, VCA Animal Hospitals, SignalPET, Veterinary Partner (VIN), and Cornell/AAHA veterinary sources for this project — not scraped verbatim from any single page. See each entry's sourceUrl for the original.",
-    "disclaimer": "Not a substitute for veterinary care. For a suspected poisoning or obstruction, contact a veterinarian immediately."
+ "metadata": {
+  "title": "Curated product, activity, and object hazards for pets",
+  "compiled": "2026-07-19",
+  "compiled_by": "Manually researched and summarized from ASPCA, AVMA, Pet Poison Helpline, CPSC, VCA Animal Hospitals, SignalPET, Veterinary Partner (VIN), and Cornell/AAHA veterinary sources for this project — not scraped verbatim from any single page. See each entry's sourceUrl for the original.",
+  "disclaimer": "Not a substitute for veterinary care. For a suspected poisoning or obstruction, contact a veterinarian immediately."
+ },
+ "entries": [
+  {
+   "name": "Retractable leashes",
+   "thingType": "product",
+   "petTypes": [
+    "dog"
+   ],
+   "severity": "moderate",
+   "hazard": "The thin cord can cause deep lacerations, rope burn, or finger injury if it contacts skin while paying out at speed, and the plastic handle or metal clasp can break under load, letting the leash recoil into the owner's face or eyes.",
+   "notes": "A 2008 CPSC recall of roughly 223,000 SlyDog retractable leashes followed reports including a broken tooth and a displaced eye lens after the metal clasp broke.",
+   "source": "CPSC recall database; Consumer Reports",
+   "sourceUrl": "https://www.cpsc.gov/Recalls/2008/worldwise-inc-recalls-retractable-dog-leashes-metal-clasp-can-break-and-cause-facial"
   },
-  "entries": [
-    {
-      "name": "Retractable leashes",
-      "thingType": "product",
-      "petTypes": ["dog"],
-      "severity": "moderate",
-      "hazard": "The thin cord can cause deep lacerations, rope burn, or finger injury if it contacts skin while paying out at speed, and the plastic handle or metal clasp can break under load, letting the leash recoil into the owner's face or eyes.",
-      "notes": "A 2008 CPSC recall of roughly 223,000 SlyDog retractable leashes followed reports including a broken tooth and a displaced eye lens after the metal clasp broke.",
-      "source": "CPSC recall database; Consumer Reports",
-      "sourceUrl": "https://www.cpsc.gov/Recalls/2008/worldwise-inc-recalls-retractable-dog-leashes-metal-clasp-can-break-and-cause-facial"
-    },
-    {
-      "name": "Leaving a pet in a parked car",
-      "thingType": "activity",
-      "petTypes": ["dog", "cat"],
-      "severity": "severe",
-      "hazard": "A parked car's interior temperature rises about 20°F in 10 minutes and nearly 30°F in 20 minutes, even in mild weather. A dog's body temperature above roughly 105°F risks heatstroke. Cracking the windows does not meaningfully slow the rise.",
-      "notes": "AVMA reports hundreds of pet deaths from vehicle heat exhaustion every year.",
-      "source": "American Veterinary Medical Association (AVMA)",
-      "sourceUrl": "https://www.avma.org/resources-tools/pet-owners/petcare/hot-cars-and-loose-pets"
-    },
-    {
-      "name": "Essential oil diffusers (active/ultrasonic)",
-      "thingType": "product",
-      "petTypes": ["cat", "dog"],
-      "severity": "moderate",
-      "hazard": "Cats lack the liver enzyme (glucuronidase) needed to break down many essential oil compounds. Active/ultrasonic diffusers disperse microdroplets that can be inhaled or settle on fur and be ingested during grooming. Oils of particular concern include tea tree, wintergreen, pine, citrus (d-limonene), cinnamon, clove, eucalyptus, pennyroyal, and ylang ylang.",
-      "notes": "Signs include drooling, vomiting, tremors, wobbliness, and low body temperature.",
-      "source": "Pet Poison Helpline",
-      "sourceUrl": "https://www.petpoisonhelpline.com/blog/essential-oils-cats/"
-    },
-    {
-      "name": "Dog flea/tick spot-on products applied to cats",
-      "thingType": "product",
-      "petTypes": ["cat"],
-      "severity": "severe",
-      "hazard": "High-concentration (45-65%) permethrin spot-on products made for dogs are highly toxic to cats, which lack the enzyme needed to detoxify permethrin. Cats can also be poisoned secondhand by grooming a treated dog. Causes tremors, seizures, and hyperthermia; there is no antidote, only supportive care.",
-      "notes": "Low-concentration (~2%) permethrin sprays labeled for cats are not considered toxic to cats at that concentration.",
-      "source": "ASPCA Professional; veterinary literature",
-      "sourceUrl": "https://www.aspcapro.org/sites/default/files/d-veccs_april00_0.pdf"
-    },
-    {
-      "name": "Ice melt / rock salt de-icing products",
-      "thingType": "product",
-      "petTypes": ["dog", "cat"],
-      "severity": "mild",
-      "hazard": "A chemical irritant to paw pads, causing burning, cracking, or frostbite-like injury when pellets lodge between toes, and can cause vomiting or diarrhea if licked off paws or ingested directly.",
-      "notes": "Wiping paws with a damp cloth after walking on treated ground reduces both the skin and ingestion risk.",
-      "source": "ASPCA",
-      "sourceUrl": "https://www.aspca.org/news/keeping-pets-safe-during-winter-dangers-ice-melts"
-    },
-    {
-      "name": "Swimming in or drinking from water with a blue-green algae bloom",
-      "thingType": "activity",
-      "petTypes": ["dog", "cat", "horse"],
-      "severity": "severe",
-      "hazard": "Cyanobacteria blooms in stagnant lakes, ponds, and rivers can produce microcystin and anatoxin, which can cause liver failure or neurologic collapse within hours. Dogs can also be poisoned by licking algae off their fur after swimming. There is no antidote.",
-      "notes": "Blooms often appear as bluish-green scum or foam on the water's surface, especially in hot weather.",
-      "source": "Cornell University College of Veterinary Medicine; AAHA",
-      "sourceUrl": "https://www.vet.cornell.edu/departments-centers-and-institutes/riney-canine-health-center/canine-health-topics/blue-green-algae-poisoning-cyanobacteria-toxicosis"
-    },
-    {
-      "name": "Unused fabric softener dryer sheets",
-      "thingType": "product",
-      "petTypes": ["dog", "cat"],
-      "severity": "moderate",
-      "hazard": "Unused dryer sheets contain cationic detergents that are corrosive to mucous membranes. Chewing one can cause chemical burns or ulcers in the mouth, esophagus, and stomach, and the sheet itself can cause an intestinal obstruction.",
-      "notes": "Signs include excessive drooling, gulping, and vomiting (with or without blood).",
-      "source": "ASPCA",
-      "sourceUrl": "https://www.aspca.org/news/pet-poisons-be-mindful-these-household-products-and-cleaning-agents"
-    },
-    {
-      "name": "Socks",
-      "thingType": "object",
-      "petTypes": ["dog"],
-      "severity": "severe",
-      "hazard": "Whole socks are a leading cause of intestinal obstruction in dogs, especially small and medium breeds — most modern fabrics don't break down in the stomach, and a lodged sock can cut off blood supply to the intestine. Symptoms (vomiting, loss of appetite, lethargy, abdominal pain) can take 12-72 hours to appear, so a dog can look completely normal right after swallowing one even as a blockage forms underneath.",
-      "notes": "Don't wait to see if it passes on its own. If you saw or strongly suspect your dog swallowed a sock, call a vet immediately — caught early (before it leaves the stomach), it can sometimes be retrieved by inducing vomiting or endoscopy instead of surgery.",
-      "source": "VCA Animal Hospitals; VEG ER for Pets; Cornell University College of Veterinary Medicine",
-      "sourceUrl": "https://vcahospitals.com/know-your-pet/ingestion-of-foreign-bodies-in-dogs"
-    },
-    {
-      "name": "Underwear / elastic waistband clothing",
-      "thingType": "object",
-      "petTypes": ["dog"],
-      "severity": "severe",
-      "hazard": "Carries the same obstruction risk as socks, plus an added danger from the elastic waistband: it can act as a 'linear foreign body' — anchoring at one end (often under the tongue or further down the GI tract) while the intestines try to move the rest along, bunching (plicating) the gut around it. This can saw through the intestinal wall and cause a life-threatening perforation and infection.",
-      "notes": "If you see string-like material looped under your dog's tongue, do not pull on it — this can worsen internal damage. Get to a vet immediately either way, even before symptoms appear.",
-      "source": "SignalPET; Veterinary Partner (VIN); VCA Animal Hospitals",
-      "sourceUrl": "https://www.signalpet.com/linear-foreign-bodies/"
-    },
-    {
-      "name": "Repeated stair climbing or jumping on/off furniture",
-      "otherNames": ["Stairs", "Stair climbing", "Jumping on furniture", "IVDD", "Intervertebral disc disease"],
-      "thingType": "activity",
-      "petTypes": ["dog"],
-      "breedTraits": ["long-backed"],
-      "severity": "moderate",
-      "hazard": "In chondrodystrophic (long-backed, short-legged) breeds, repeated stair use and jumping on/off furniture put repetitive strain on the spine, raising the risk of intervertebral disc disease (IVDD) — herniated or ruptured discs that can cause pain, wobbliness, or hind-limb paralysis. Dachshunds have a relative IVDD risk roughly 10-12 times higher than other breeds.",
-      "notes": "Ramps or steps for couches/beds, and carrying the dog up and down stairs, are common ways owners reduce this risk day to day.",
-      "source": "DachsLife 2015 (PMC); AKC Canine Health Foundation",
-      "sourceUrl": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5097381/"
-    },
-    {
-      "name": "String, yarn, ribbon, dental floss, tinsel (linear foreign bodies)",
-      "thingType": "object",
-      "petTypes": ["dog", "cat"],
-      "severity": "severe",
-      "hazard": "Long, thin, flexible material is one of the most dangerous things a dog or cat can swallow — cats especially. One end often anchors under the tongue or in the stomach while the intestines try to pull the rest through, bunching (plicating) the intestines and sawing through the gut wall over time, which can lead to perforation and life-threatening peritonitis if untreated.",
-      "notes": "Never pull on visible string, especially if it disappears under the tongue — call a vet immediately instead. Early recognition is the biggest factor in survival.",
-      "source": "Veterinary Partner (VIN); SignalPET; Cornell University College of Veterinary Medicine",
-      "sourceUrl": "https://veterinarypartner.vin.com/default.aspx?pid=19239&id=6075371"
-    }
-  ]
+  {
+   "name": "Leaving a pet in a parked car",
+   "thingType": "activity",
+   "petTypes": [
+    "dog",
+    "cat"
+   ],
+   "severity": "severe",
+   "hazard": "A parked car's interior temperature rises about 20°F in 10 minutes and nearly 30°F in 20 minutes, even in mild weather. A dog's body temperature above roughly 105°F risks heatstroke. Cracking the windows does not meaningfully slow the rise.",
+   "notes": "AVMA reports hundreds of pet deaths from vehicle heat exhaustion every year.",
+   "source": "American Veterinary Medical Association (AVMA)",
+   "sourceUrl": "https://www.avma.org/resources-tools/pet-owners/petcare/hot-cars-and-loose-pets"
+  },
+  {
+   "name": "Essential oil diffusers (active/ultrasonic)",
+   "thingType": "product",
+   "petTypes": [
+    "cat",
+    "dog"
+   ],
+   "severity": "moderate",
+   "hazard": "Cats lack the liver enzyme (glucuronidase) needed to break down many essential oil compounds. Active/ultrasonic diffusers disperse microdroplets that can be inhaled or settle on fur and be ingested during grooming. Oils of particular concern include tea tree, wintergreen, pine, citrus (d-limonene), cinnamon, clove, eucalyptus, pennyroyal, and ylang ylang.",
+   "notes": "Signs include drooling, vomiting, tremors, wobbliness, and low body temperature.",
+   "source": "Pet Poison Helpline",
+   "sourceUrl": "https://www.petpoisonhelpline.com/blog/essential-oils-cats/"
+  },
+  {
+   "name": "Dog flea/tick spot-on products applied to cats",
+   "thingType": "product",
+   "petTypes": [
+    "cat"
+   ],
+   "severity": "severe",
+   "hazard": "High-concentration (45-65%) permethrin spot-on products made for dogs are highly toxic to cats, which lack the enzyme needed to detoxify permethrin. Cats can also be poisoned secondhand by grooming a treated dog. Causes tremors, seizures, and hyperthermia; there is no antidote, only supportive care.",
+   "notes": "Low-concentration (~2%) permethrin sprays labeled for cats are not considered toxic to cats at that concentration.",
+   "source": "ASPCA Professional; veterinary literature",
+   "sourceUrl": "https://www.aspcapro.org/sites/default/files/d-veccs_april00_0.pdf"
+  },
+  {
+   "name": "Ice melt / rock salt de-icing products",
+   "thingType": "product",
+   "petTypes": [
+    "dog",
+    "cat"
+   ],
+   "severity": "mild",
+   "hazard": "A chemical irritant to paw pads, causing burning, cracking, or frostbite-like injury when pellets lodge between toes, and can cause vomiting or diarrhea if licked off paws or ingested directly.",
+   "notes": "Wiping paws with a damp cloth after walking on treated ground reduces both the skin and ingestion risk.",
+   "source": "ASPCA",
+   "sourceUrl": "https://www.aspca.org/news/keeping-pets-safe-during-winter-dangers-ice-melts"
+  },
+  {
+   "name": "Swimming in or drinking from water with a blue-green algae bloom",
+   "thingType": "activity",
+   "petTypes": [
+    "dog",
+    "cat",
+    "horse"
+   ],
+   "severity": "severe",
+   "hazard": "Cyanobacteria blooms in stagnant lakes, ponds, and rivers can produce microcystin and anatoxin, which can cause liver failure or neurologic collapse within hours. Dogs can also be poisoned by licking algae off their fur after swimming. There is no antidote.",
+   "notes": "Blooms often appear as bluish-green scum or foam on the water's surface, especially in hot weather.",
+   "source": "Cornell University College of Veterinary Medicine; AAHA",
+   "sourceUrl": "https://www.vet.cornell.edu/departments-centers-and-institutes/riney-canine-health-center/canine-health-topics/blue-green-algae-poisoning-cyanobacteria-toxicosis"
+  },
+  {
+   "name": "Unused fabric softener dryer sheets",
+   "thingType": "product",
+   "petTypes": [
+    "dog",
+    "cat"
+   ],
+   "severity": "moderate",
+   "hazard": "Unused dryer sheets contain cationic detergents that are corrosive to mucous membranes. Chewing one can cause chemical burns or ulcers in the mouth, esophagus, and stomach, and the sheet itself can cause an intestinal obstruction.",
+   "notes": "Signs include excessive drooling, gulping, and vomiting (with or without blood).",
+   "source": "ASPCA",
+   "sourceUrl": "https://www.aspca.org/news/pet-poisons-be-mindful-these-household-products-and-cleaning-agents"
+  },
+  {
+   "name": "Socks",
+   "thingType": "object",
+   "petTypes": [
+    "dog"
+   ],
+   "severity": "severe",
+   "hazard": "Whole socks are a leading cause of intestinal obstruction in dogs, especially small and medium breeds — most modern fabrics don't break down in the stomach, and a lodged sock can cut off blood supply to the intestine. Symptoms (vomiting, loss of appetite, lethargy, abdominal pain) can take 12-72 hours to appear, so a dog can look completely normal right after swallowing one even as a blockage forms underneath.",
+   "notes": "Don't wait to see if it passes on its own. If you saw or strongly suspect your dog swallowed a sock, call a vet immediately — caught early (before it leaves the stomach), it can sometimes be retrieved by inducing vomiting or endoscopy instead of surgery.",
+   "source": "VCA Animal Hospitals; VEG ER for Pets; Cornell University College of Veterinary Medicine",
+   "sourceUrl": "https://vcahospitals.com/know-your-pet/ingestion-of-foreign-bodies-in-dogs"
+  },
+  {
+   "name": "Underwear / elastic waistband clothing",
+   "thingType": "object",
+   "petTypes": [
+    "dog"
+   ],
+   "severity": "severe",
+   "hazard": "Carries the same obstruction risk as socks, plus an added danger from the elastic waistband: it can act as a 'linear foreign body' — anchoring at one end (often under the tongue or further down the GI tract) while the intestines try to move the rest along, bunching (plicating) the gut around it. This can saw through the intestinal wall and cause a life-threatening perforation and infection.",
+   "notes": "If you see string-like material looped under your dog's tongue, do not pull on it — this can worsen internal damage. Get to a vet immediately either way, even before symptoms appear.",
+   "source": "SignalPET; Veterinary Partner (VIN); VCA Animal Hospitals",
+   "sourceUrl": "https://www.signalpet.com/linear-foreign-bodies/"
+  },
+  {
+   "name": "Repeated stair climbing or jumping on/off furniture",
+   "otherNames": [
+    "Stairs",
+    "Stair climbing",
+    "Jumping on furniture",
+    "IVDD",
+    "Intervertebral disc disease"
+   ],
+   "thingType": "activity",
+   "petTypes": [
+    "dog"
+   ],
+   "breedTraits": [
+    "long-backed"
+   ],
+   "severity": "moderate",
+   "hazard": "In chondrodystrophic (long-backed, short-legged) breeds, repeated stair use and jumping on/off furniture put repetitive strain on the spine, raising the risk of intervertebral disc disease (IVDD) — herniated or ruptured discs that can cause pain, wobbliness, or hind-limb paralysis. Dachshunds have a relative IVDD risk roughly 10-12 times higher than other breeds.",
+   "notes": "Ramps or steps for couches/beds, and carrying the dog up and down stairs, are common ways owners reduce this risk day to day.",
+   "source": "DachsLife 2015 (PMC); AKC Canine Health Foundation",
+   "sourceUrl": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5097381/"
+  },
+  {
+   "name": "String",
+   "thingType": "object",
+   "petTypes": [
+    "dog",
+    "cat"
+   ],
+   "severity": "severe",
+   "hazard": "Long, thin, flexible material is one of the most dangerous things a dog or cat can swallow — cats especially. One end often anchors under the tongue or in the stomach while the intestines try to pull the rest through, bunching (plicating) the intestines and sawing through the gut wall over time, which can lead to perforation and life-threatening peritonitis if untreated.",
+   "notes": "Never pull on visible string, especially if it disappears under the tongue — call a vet immediately instead. Early recognition is the biggest factor in survival.",
+   "source": "Veterinary Partner (VIN); SignalPET; Cornell University College of Veterinary Medicine",
+   "sourceUrl": "https://veterinarypartner.vin.com/default.aspx?pid=19239&id=6075371"
+  },
+  {
+   "name": "Yarn",
+   "thingType": "object",
+   "petTypes": [
+    "dog",
+    "cat"
+   ],
+   "severity": "severe",
+   "hazard": "Long, thin, flexible material is one of the most dangerous things a dog or cat can swallow — cats especially. One end often anchors under the tongue or in the stomach while the intestines try to pull the rest through, bunching (plicating) the intestines and sawing through the gut wall over time, which can lead to perforation and life-threatening peritonitis if untreated.",
+   "notes": "Never pull on visible string, especially if it disappears under the tongue — call a vet immediately instead. Early recognition is the biggest factor in survival.",
+   "source": "Veterinary Partner (VIN); SignalPET; Cornell University College of Veterinary Medicine",
+   "sourceUrl": "https://veterinarypartner.vin.com/default.aspx?pid=19239&id=6075371"
+  },
+  {
+   "name": "Ribbon",
+   "thingType": "object",
+   "petTypes": [
+    "dog",
+    "cat"
+   ],
+   "severity": "severe",
+   "hazard": "Long, thin, flexible material is one of the most dangerous things a dog or cat can swallow — cats especially. One end often anchors under the tongue or in the stomach while the intestines try to pull the rest through, bunching (plicating) the intestines and sawing through the gut wall over time, which can lead to perforation and life-threatening peritonitis if untreated.",
+   "notes": "Never pull on visible string, especially if it disappears under the tongue — call a vet immediately instead. Early recognition is the biggest factor in survival.",
+   "source": "Veterinary Partner (VIN); SignalPET; Cornell University College of Veterinary Medicine",
+   "sourceUrl": "https://veterinarypartner.vin.com/default.aspx?pid=19239&id=6075371"
+  },
+  {
+   "name": "Dental floss",
+   "thingType": "object",
+   "petTypes": [
+    "dog",
+    "cat"
+   ],
+   "severity": "severe",
+   "hazard": "Long, thin, flexible material is one of the most dangerous things a dog or cat can swallow — cats especially. One end often anchors under the tongue or in the stomach while the intestines try to pull the rest through, bunching (plicating) the intestines and sawing through the gut wall over time, which can lead to perforation and life-threatening peritonitis if untreated.",
+   "notes": "Never pull on visible string, especially if it disappears under the tongue — call a vet immediately instead. Early recognition is the biggest factor in survival.",
+   "source": "Veterinary Partner (VIN); SignalPET; Cornell University College of Veterinary Medicine",
+   "sourceUrl": "https://veterinarypartner.vin.com/default.aspx?pid=19239&id=6075371"
+  },
+  {
+   "name": "Tinsel",
+   "thingType": "object",
+   "petTypes": [
+    "dog",
+    "cat"
+   ],
+   "severity": "severe",
+   "hazard": "Long, thin, flexible material is one of the most dangerous things a dog or cat can swallow — cats especially. One end often anchors under the tongue or in the stomach while the intestines try to pull the rest through, bunching (plicating) the intestines and sawing through the gut wall over time, which can lead to perforation and life-threatening peritonitis if untreated.",
+   "notes": "Never pull on visible string, especially if it disappears under the tongue — call a vet immediately instead. Early recognition is the biggest factor in survival.",
+   "source": "Veterinary Partner (VIN); SignalPET; Cornell University College of Veterinary Medicine",
+   "sourceUrl": "https://veterinarypartner.vin.com/default.aspx?pid=19239&id=6075371"
+  },
+  {
+   "name": "Linear foreign bodies (long flexible household items)",
+   "thingType": "object",
+   "petTypes": [
+    "dog",
+    "cat"
+   ],
+   "severity": "severe",
+   "hazard": "Long, thin, flexible material is one of the most dangerous things a dog or cat can swallow — cats especially. One end often anchors under the tongue or in the stomach while the intestines try to pull the rest through, bunching (plicating) the intestines and sawing through the gut wall over time, which can lead to perforation and life-threatening peritonitis if untreated.",
+   "notes": "Never pull on visible string, especially if it disappears under the tongue — call a vet immediately instead. Early recognition is the biggest factor in survival. Use this entry for any long flexible material not covered by a specific item entry (string, yarn, ribbon, dental floss, tinsel each have their own entry).",
+   "source": "Veterinary Partner (VIN); SignalPET; Cornell University College of Veterinary Medicine",
+   "sourceUrl": "https://veterinarypartner.vin.com/default.aspx?pid=19239&id=6075371"
+  },
+  {
+   "name": "Cholecalciferol rodenticides (rat/mouse poison)",
+   "thingType": "product",
+   "petTypes": [
+    "dog",
+    "cat"
+   ],
+   "severity": "severe",
+   "hazard": "Cholecalciferol (vitamin D3) rat/mouse bait disrupts calcium and phosphorus regulation, causing hypercalcemia and soft-tissue (especially kidney) calcification. Concentrated formulations mean even a small ingested amount can be dangerous. Signs (depression, loss of appetite, excessive thirst/urination, vomiting) are typically delayed 12–36 hours, with kidney damage progressing over the following days.",
+   "notes": "Same active ingredient and toxicity mechanism as high-potency vitamin D3 supplements — see that entry. Check the bait packaging for \"cholecalciferol\" as the active ingredient (other common rodenticide actives — anticoagulants, bromethalin — have different mechanisms and antidotes).",
+   "source": "ASPCA; Merck Veterinary Manual",
+   "sourceUrl": "https://www.aspca.org/news/rodenticide-and-your-pet-what-you-need-know"
+  }
+ ]
 }

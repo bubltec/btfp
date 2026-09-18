@@ -6,10 +6,12 @@
   "scripts": {
     "seed:local": "tsx src/run.ts --endpoint http://localhost:8000",
     "scrape:vetmeds": "tsx src/scrape-vetmeds.ts",
+    "review:similar": "tsx src/review-similar-run.ts",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.716.0",
     "@aws-sdk/client-dynamodb": "^3.716.0",
     "@aws-sdk/lib-dynamodb": "^3.716.0",
     "@btfp/shared-types": "workspace:*",
@@ -17,6 +19,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.1",
+    "aws-sdk-client-mock": "^4.1.0",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",
     "vitest": "^2.1.0"
