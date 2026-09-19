@@ -34,7 +34,7 @@ export function normalizeGatewayUrl(url: string): string {
 export class GatewaySearchClient implements SearchClient {
   private readonly gatewayUrl: string;
   private readonly fetchImpl: typeof fetch;
-  private readonly toolName: string;
+  private toolName: string;
   private nextId = 1;
   private sessionId: string | undefined;
   private initialized = false;
@@ -42,16 +42,43 @@ export class GatewaySearchClient implements SearchClient {
   constructor(options: GatewaySearchClientOptions) {
     this.gatewayUrl = normalizeGatewayUrl(options.gatewayUrl);
     this.fetchImpl = options.fetchImpl ?? createSignedFetch(options.region);
-    this.toolName = options.toolName ?? 'WebSearch';
+    this.toolName = options.toolName ?? '';
+  }
+
+  async listTools(): Promise<Array<{ name: string; description?: string }>> {
+    await this.ensureInitialized();
+    const result = (await this.rpc('tools/list', {})) as {
+      tools?: Array<{ name?: string; description?: string }>;
+    };
+    return (result.tools ?? [])
+      .filter(
+        (tool): tool is { name: string; description?: string } => typeof tool.name === 'string',
+      )
+      .map((tool) => ({ name: tool.name, description: tool.description }));
   }
 
   async search(query: string, maxResults: number): Promise<SearchHit[]> {
     await this.ensureInitialized();
+    const name = this.toolName || (await this.resolveSearchToolName());
     const response = await this.rpc('tools/call', {
-      name: this.toolName,
+      name,
       arguments: { query: query.slice(0, 200), maxResults },
     });
     return parseSearchHits(response);
+  }
+
+  private async resolveSearchToolName(): Promise<string> {
+    const tools = await this.listTools();
+    const match =
+      tools.find((tool) => /^web[_-]?search$/i.test(tool.name)) ??
+      tools.find((tool) => /search/i.test(tool.name));
+    if (!match) {
+      throw new Error(
+        `Gateway has no search tool. Available: ${tools.map((tool) => tool.name).join(', ') || '(none)'}`,
+      );
+    }
+    this.toolName = match.name;
+    return match.name;
   }
 
   private async ensureInitialized(): Promise<void> {

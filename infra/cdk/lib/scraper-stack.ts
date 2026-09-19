@@ -142,7 +142,11 @@ export class ScraperStack extends cdk.Stack {
           'bedrock-agentcore:StartBrowserSession',
           'bedrock-agentcore:StopBrowserSession',
           'bedrock-agentcore:GetBrowserSession',
+          'bedrock-agentcore:ListBrowserSessions',
           'bedrock-agentcore:UpdateBrowserStream',
+          // Required for Playwright's CDP WebSocket. StartBrowserSession
+          // succeeds without it; connectOverCDP then 403s.
+          'bedrock-agentcore:ConnectBrowserAutomationStream',
         ],
         resources: ['*'],
       }),

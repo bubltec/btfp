@@ -1,71 +1,73 @@
 import * as cdk from 'aws-cdk-lib';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
-import * as codedeploy from 'aws-cdk-lib/aws-codedeploy';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as sam from 'aws-cdk-lib/aws-sam';
 
 const CANARY_PERIOD = cdk.Duration.minutes(1);
 
-function errorAlarm(
-  scope: lambda.Function,
-  id: string,
-  description: string,
-  metric: cloudwatch.IMetric,
-): cloudwatch.Alarm {
-  return new cloudwatch.Alarm(scope, id, {
-    alarmDescription: description,
-    metric,
-    threshold: 1,
-    evaluationPeriods: 1,
-    comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-    treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
-  });
-}
-
 /**
- * SAM's AutoPublishAlias + DeploymentPreference, as CDK L2:
- * publish a `live` alias on every function change, shift 10% of traffic for
- * 5 minutes, then the rest — and roll the alias back if Errors >= 1 on
- * either the alias or the new version.
+ * Turns a CDK `Function` into an `AWS::Serverless::Function` so we get SAM's
+ * AutoPublishAlias / AutoPublishAliasAllProperties / DeploymentPreference
+ * instead of a hand-rolled CodeDeploy `LambdaDeploymentGroup`.
  *
- * Callers must send invoke traffic at the returned alias, not `$LATEST`,
- * or CodeDeploy's shift is a no-op for users. Do not set
- * `additionalVersions` on the alias; CodeDeploy owns the weights.
+ * `deploymentPreference` is SAM's `CfnFunction.DeploymentPreferenceProperty`.
+ * `type` starts the traffic shift; `alarms` (if any) only roll it back.
+ *
+ * Traffic must go to the returned `:live` alias, not `$LATEST`.
  */
-export function publishLiveAliasWithCanary(fn: lambda.Function): lambda.Alias {
-  const alias = fn.addAlias('live');
+export function publishLiveAlias(
+  fn: lambda.Function,
+  deploymentPreference: sam.CfnFunction.DeploymentPreferenceProperty,
+): lambda.IFunction {
+  fn.stack.addTransform('AWS::Serverless-2016-10-31');
 
-  const aliasErrors = errorAlarm(
-    fn,
-    'LiveAliasErrors',
-    `${fn.node.path} live alias Errors >= 1 — CodeDeploy rolls the canary back`,
-    alias.metricErrors({ period: CANARY_PERIOD, statistic: 'sum' }),
-  );
+  const cfn = fn.node.defaultChild as lambda.CfnFunction;
+  cfn.addOverride('Type', 'AWS::Serverless::Function');
 
-  // SAM's LatestVersionErrorMetricGreaterThanZeroAlarm: only the version
-  // currently being canaried, invoked through the live alias. An error on
-  // the old version must not fail a good deploy.
-  const newVersionErrors = errorAlarm(
-    fn,
-    'LiveVersionErrors',
-    `${fn.node.path} new version Errors >= 1 — CodeDeploy rolls the canary back`,
-    new cloudwatch.Metric({
-      namespace: 'AWS/Lambda',
-      metricName: 'Errors',
-      statistic: 'sum',
-      period: CANARY_PERIOD,
-      dimensionsMap: {
-        FunctionName: fn.functionName,
-        Resource: `${fn.functionName}:live`,
-        ExecutedVersion: fn.currentVersion.version,
-      },
-    }),
-  );
+  const imageUri = (cfn.code as lambda.CfnFunction.CodeProperty | undefined)?.imageUri;
+  if (imageUri) {
+    cfn.addPropertyOverride('ImageUri', imageUri);
+    cfn.addPropertyDeletionOverride('Code');
+  }
 
-  new codedeploy.LambdaDeploymentGroup(fn, 'Canary', {
-    alias,
-    deploymentConfig: codedeploy.LambdaDeploymentConfig.CANARY_10PERCENT_5MINUTES,
-    alarms: [aliasErrors, newVersionErrors],
+  cfn.addPropertyOverride('AutoPublishAlias', 'live');
+  cfn.addPropertyOverride('AutoPublishAliasAllProperties', true);
+
+  const shifting = deploymentPreference.type && deploymentPreference.type !== 'AllAtOnce';
+  let alarms = deploymentPreference.alarms;
+  if (shifting && !alarms) {
+    const aliasErrors = new cloudwatch.Alarm(fn, 'LiveAliasErrors', {
+      alarmDescription: `${fn.node.path} live alias Errors >= 1 — SAM rolls the canary back`,
+      metric: new cloudwatch.Metric({
+        namespace: 'AWS/Lambda',
+        metricName: 'Errors',
+        statistic: 'sum',
+        period: CANARY_PERIOD,
+        dimensionsMap: {
+          FunctionName: fn.functionName,
+          Resource: `${fn.functionName}:live`,
+        },
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    alarms = [aliasErrors.alarmName];
+  }
+
+  cfn.addPropertyOverride('DeploymentPreference', {
+    Type: deploymentPreference.type,
+    ...(alarms ? { Alarms: alarms } : {}),
+    ...(deploymentPreference.enabled !== undefined
+      ? { Enabled: deploymentPreference.enabled }
+      : {}),
+    ...(deploymentPreference.hooks ? { Hooks: deploymentPreference.hooks } : {}),
+    ...(deploymentPreference.role ? { Role: deploymentPreference.role } : {}),
   });
 
-  return alias;
+  return lambda.Function.fromFunctionAttributes(fn, 'LiveAlias', {
+    functionArn: `${fn.functionArn}:live`,
+    role: fn.role,
+  });
 }

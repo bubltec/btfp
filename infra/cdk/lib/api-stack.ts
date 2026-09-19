@@ -20,7 +20,7 @@ import {
   ROOT_DOMAIN,
   SES_FROM_ADDRESS,
 } from './config.js';
-import { publishLiveAliasWithCanary } from './lambda-canary.js';
+import { publishLiveAlias } from './lambda-canary.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -94,7 +94,9 @@ export class ApiStack extends cdk.Stack {
       },
     });
 
-    const live = publishLiveAliasWithCanary(handler);
+    const live = publishLiveAlias(handler, {
+      type: isProd ? 'Canary10Percent5Minutes' : 'AllAtOnce',
+    });
 
     props.contentTable.grantReadWriteData(handler);
     props.usersTable.grantReadWriteData(handler);
@@ -132,8 +134,7 @@ export class ApiStack extends cdk.Stack {
 
     this.httpApi = new apigwv2.HttpApi(this, 'HttpApi', {
       apiName: `btfp-${props.envConfig.envName}-api`,
-      // Alias, not `$LATEST` — otherwise CodeDeploy's canary never sees
-      // user traffic. See publishLiveAliasWithCanary.
+      // Alias, not `$LATEST` — SAM AutoPublishAlias owns `live`.
       defaultIntegration: new HttpLambdaIntegration('BffIntegration', live),
     });
 
