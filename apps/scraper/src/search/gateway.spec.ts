@@ -80,6 +80,7 @@ describe('GatewaySearchClient', () => {
       gatewayUrl: 'https://gw.example/mcp',
       region: 'us-east-1',
       fetchImpl,
+      toolName: 'WebSearch',
     });
     const hits = await client.search('a'.repeat(250), 5);
     expect(hits).toHaveLength(1);
@@ -98,5 +99,37 @@ describe('GatewaySearchClient', () => {
       ([, init]) => JSON.parse(String((init as RequestInit).body)).method,
     );
     expect(methods.filter((m) => m === 'initialize')).toHaveLength(1);
+  });
+
+  it('discovers the search tool name from tools/list when it is not WebSearch', async () => {
+    const fetchImpl = vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as { method: string };
+      let result: unknown = { protocolVersion: '2024-11-05' };
+      if (body.method === 'tools/list') {
+        result = { tools: [{ name: 'web_search' }] };
+      } else if (body.method === 'tools/call') {
+        result = { content: [{ type: 'text', text: JSON.stringify(samplePayload) }] };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result }),
+      } as Response;
+    });
+
+    const client = new GatewaySearchClient({
+      gatewayUrl: 'https://gw.example/mcp',
+      region: 'us-east-1',
+      fetchImpl,
+    });
+    await client.search('xylitol', 3);
+
+    const calls = fetchImpl.mock.calls.map(([, init]) =>
+      JSON.parse(String((init as RequestInit).body)),
+    );
+    expect(calls.some((body) => body.method === 'tools/list')).toBe(true);
+    const call = calls.find((body) => body.method === 'tools/call');
+    expect(call.params.name).toBe('web_search');
   });
 });
