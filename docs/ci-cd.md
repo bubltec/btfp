@@ -203,10 +203,11 @@ Not automatable from CDK — these are GitHub repo settings.
   email sign-up against dev's actual DynamoDB tables on every run. Accepted rather than built
   around — dev isn't a pristine/indexed environment anyway. Wipe/reseed it periodically by hand
   if it gets noisy (`docs/infra.md` has the seed command).
-- **Prod Lambda canary watches AWS/Lambda Errors, not Nest HTTP 5xx.** A handler that returns a
-  500 JSON body is still a successful invocation, so SAM's `Canary10Percent5Minutes` will not
-  roll back for that. Dev uses `AllAtOnce`. Static web assets (S3 + CloudFront) are still an
-  in-place overwrite.
+- **Prod Lambda canary rollback watches AWS/Lambda Errors, not Nest HTTP 5xx.** The canary
+  itself is started by `DeploymentPreference: Canary10Percent5Minutes`. The `live` alias
+  Errors alarm is only a rollback trigger. A handler that returns a 500 JSON body is still a
+  successful invocation, so that alarm will not fire. Dev uses `AllAtOnce` and has no rollback
+  alarm. Static web assets (S3 + CloudFront) are still an in-place overwrite.
 - **A `prod-diff`/`deploy-prod` failure between the two `BtfpProd` deploys leaves prod running
   new API/DB code with stale web assets** until the job is re-run or the prerender+web-deploy
   steps are run manually (same commands `docs/infra.md` documents). This is visible (a red job
