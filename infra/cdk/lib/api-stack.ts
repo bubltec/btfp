@@ -94,7 +94,9 @@ export class ApiStack extends cdk.Stack {
       },
     });
 
-    const live = publishLiveAlias(handler, isProd ? 'Canary10Percent5Minutes' : 'AllAtOnce');
+    const live = publishLiveAlias(handler, {
+      type: isProd ? 'Canary10Percent5Minutes' : 'AllAtOnce',
+    });
 
     props.contentTable.grantReadWriteData(handler);
     props.usersTable.grantReadWriteData(handler);

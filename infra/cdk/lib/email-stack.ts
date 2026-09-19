@@ -99,7 +99,7 @@ export class EmailStack extends cdk.Stack {
       },
     });
 
-    const live = publishLiveAlias(forwarderFn, 'AllAtOnce');
+    const live = publishLiveAlias(forwarderFn, { type: 'AllAtOnce' });
 
     mailBucket.grantRead(forwarderFn);
     forwarderFn.addToRolePolicy(

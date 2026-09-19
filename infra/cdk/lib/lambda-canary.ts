@@ -1,8 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
-
-export type LambdaDeploymentPreference = 'AllAtOnce' | 'Canary10Percent5Minutes';
+import * as sam from 'aws-cdk-lib/aws-sam';
 
 const CANARY_PERIOD = cdk.Duration.minutes(1);
 
@@ -11,15 +10,14 @@ const CANARY_PERIOD = cdk.Duration.minutes(1);
  * AutoPublishAlias / AutoPublishAliasAllProperties / DeploymentPreference
  * instead of a hand-rolled CodeDeploy `LambdaDeploymentGroup`.
  *
- * `DeploymentPreference.Type` is what *starts* the traffic shift. The
- * CloudWatch alarm is only wired on canary deploys, and only to *roll back*
- * if `Errors >= 1` on the `live` alias during that window.
+ * `deploymentPreference` is SAM's `CfnFunction.DeploymentPreferenceProperty`.
+ * `type` starts the traffic shift; `alarms` (if any) only roll it back.
  *
  * Traffic must go to the returned `:live` alias, not `$LATEST`.
  */
 export function publishLiveAlias(
   fn: lambda.Function,
-  preference: LambdaDeploymentPreference,
+  deploymentPreference: sam.CfnFunction.DeploymentPreferenceProperty,
 ): lambda.IFunction {
   fn.stack.addTransform('AWS::Serverless-2016-10-31');
 
@@ -35,11 +33,9 @@ export function publishLiveAlias(
   cfn.addPropertyOverride('AutoPublishAlias', 'live');
   cfn.addPropertyOverride('AutoPublishAliasAllProperties', true);
 
-  const deploymentPreference: { Type: LambdaDeploymentPreference; Alarms?: string[] } = {
-    Type: preference,
-  };
-
-  if (preference === 'Canary10Percent5Minutes') {
+  const shifting = deploymentPreference.type && deploymentPreference.type !== 'AllAtOnce';
+  let alarms = deploymentPreference.alarms;
+  if (shifting && !alarms) {
     const aliasErrors = new cloudwatch.Alarm(fn, 'LiveAliasErrors', {
       alarmDescription: `${fn.node.path} live alias Errors >= 1 — SAM rolls the canary back`,
       metric: new cloudwatch.Metric({
@@ -57,10 +53,18 @@ export function publishLiveAlias(
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
-    deploymentPreference.Alarms = [aliasErrors.alarmName];
+    alarms = [aliasErrors.alarmName];
   }
 
-  cfn.addPropertyOverride('DeploymentPreference', deploymentPreference);
+  cfn.addPropertyOverride('DeploymentPreference', {
+    Type: deploymentPreference.type,
+    ...(alarms ? { Alarms: alarms } : {}),
+    ...(deploymentPreference.enabled !== undefined
+      ? { Enabled: deploymentPreference.enabled }
+      : {}),
+    ...(deploymentPreference.hooks ? { Hooks: deploymentPreference.hooks } : {}),
+    ...(deploymentPreference.role ? { Role: deploymentPreference.role } : {}),
+  });
 
   return lambda.Function.fromFunctionAttributes(fn, 'LiveAlias', {
     functionArn: `${fn.functionArn}:live`,
