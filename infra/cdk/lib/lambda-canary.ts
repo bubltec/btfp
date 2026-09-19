@@ -19,6 +19,14 @@ export function publishLiveAlias(
   fn: lambda.Function,
   deploymentPreference: sam.CfnFunction.DeploymentPreferenceProperty,
 ): lambda.IFunction {
+  // PublishVersion fails with "A version for this Lambda function exists (N)"
+  // when code+config match an already-published version. That is the usual
+  // first-deploy of AutoPublishAlias onto a function that already has versions
+  // from an earlier CDK `currentVersion` — the SAM Version resource is new to
+  // the stack, but Lambda sees no change. This env var is the configuration
+  // change that lets CreateVersion succeed; later deploys keep it.
+  fn.addEnvironment('BTFP_INVOKE_ALIAS', 'live');
+
   fn.stack.addTransform('AWS::Serverless-2016-10-31');
 
   const cfn = fn.node.defaultChild as lambda.CfnFunction;
