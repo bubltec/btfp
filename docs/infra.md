@@ -26,10 +26,11 @@ deploy gets done, just no longer the routine way changes ship.
   standalone. See [docs/ci-cd.md](./ci-cd.md).
 - **`BtfpDev`** / **`BtfpProd`** — CDK Stages, each composing:
   - **Data** — DynamoDB `Content` + `Users` tables, on-demand billing.
-  - **Scraper** — a VPC (public subnets only, no NAT gateway), an ECS cluster, and one
-    Fargate task definition running on an EventBridge schedule (every 6h) to ingest
-    candidate pet-hazard reports from Reddit into the moderation queue as unverified
-    `Contribution`s — see [docs/scraper.md](./scraper.md).
+  - **Scraper** — a VPC (public subnets only, no NAT gateway), an ECS cluster, one
+    Fargate task definition on an EventBridge schedule (every 6h), plus an AgentCore
+    Gateway (Web Search) and AgentCore Memory. The task reads Google Trends via
+    AgentCore Browser and writes unverified `Contribution`s — see
+    [docs/scraper.md](./scraper.md).
   - **Api** — one Lambda (container image — see [docs/ci-cd.md](./ci-cd.md)) running the
     NestJS BFF, behind an API Gateway HTTP API. Traffic hits a `live` alias; CodeDeploy
     canaries each new version (10% / 5 minutes) and rolls back on Lambda Errors.
@@ -50,6 +51,8 @@ deploy gets done, just no longer the routine way changes ship.
 | WAF (2 rule groups) | ~$6-8/mo |
 | SES | ~free — $0.10/1,000 emails, and this only sends verification codes |
 | Bedrock (Claude Haiku, domain classification + scraper extraction) | ~free — a few cents per 1,000 calls |
+| AgentCore Web Search (scraper, ≤8 topics/run × 4 runs/day) | ~$1-2/mo per env at $7/1,000 queries |
+| AgentCore Browser + Memory (scraper) | pennies at this cadence |
 | Brave Search (optional, org-legitimacy signal) | free tier covers this app's volume |
 | ECS Fargate (scraper, ~5min/run, every 6h) | ~$1-2/mo per env |
 | VPC (scraper, public-only, no NAT) | free |
@@ -158,10 +161,9 @@ hand.
 10. For dev: load `infra/cdk/.env.deploy.local` (see [Secrets](#secrets) above) before
     deploying — the Basic Auth password comes from there. For prod, no extra env vars needed.
 11. `pnpm --filter @btfp/infra cdk deploy BtfpDev/* BtfpProd/*` — this also deploys the
-    `Scraper` stack; a fresh environment needs the Reddit SSM params pushed
-    (`pnpm secrets:push dev`/`prod`, see [docs/scraper.md](./scraper.md)) before the
-    scraper task does anything useful — it deploys and runs fine either way, just
-    logs "Reddit credentials not configured, skipping" and no-ops until they exist.
+    `Scraper` stack (Fargate task + AgentCore Gateway/Memory). No extra secrets to
+    push; the task role is enough. If the Gateway URL env var is missing the task
+    logs a skip line and no-ops.
 
 The Bedrock inference profile id (`BEDROCK_INFERENCE_PROFILE_ID` in `config.ts`) is
 hardcoded to Claude Haiku 4.5's current profile — Anthropic model ids on Bedrock are

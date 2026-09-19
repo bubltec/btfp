@@ -10,7 +10,6 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { Platform } from 'aws-cdk-lib/aws-ecr-assets';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { grantSsmConfigRead } from '@bubltec/mycota-cdk';
 import type { EnvConfig } from './config.js';
 import { BEDROCK_INFERENCE_PROFILE_ID } from './config.js';
 
@@ -23,19 +22,94 @@ export interface ScraperStackProps extends cdk.StackProps {
 
 /**
  * Scheduled ECS Fargate task, not a long-running service — every 6h it
- * fetches new Reddit posts from a handful of subreddits, runs them through
- * Bedrock to extract candidate pet-hazard reports, and writes them as
- * *unverified* Contribution items into the existing moderation queue
- * (never a verified Thing directly — see docs/scraper.md). No inbound
- * traffic, so the VPC has only public subnets and no NAT gateway — near-
- * zero extra cost (VPC/IGW/public IP are free; only NAT gateways cost
- * money, and none are needed here). assignPublicIp is required on the
- * task below as the direct consequence of that: with no NAT gateway, a
- * task without a public IP has no route out at all.
+ * opens Google Trends (Pets and Animals) via AgentCore Browser, searches
+ * new topics through AgentCore Gateway's Web Search tool, classifies hits
+ * with Bedrock, and writes unverified Contribution items into the existing
+ * moderation queue (never a verified Thing directly — see docs/scraper.md).
+ * No inbound traffic, so the VPC has only public subnets and no NAT
+ * gateway — near-zero extra cost. assignPublicIp is required on the task
+ * below as the direct consequence of that: with no NAT gateway, a task
+ * without a public IP has no route out at all.
  */
 export class ScraperStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ScraperStackProps) {
     super(scope, id, props);
+
+    const envName = props.envConfig.envName;
+
+    const gatewayRole = new iam.Role(this, 'GatewayRole', {
+      assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'),
+      description: `AgentCore Gateway execution role for the ${envName} scraper web-search connector`,
+    });
+    gatewayRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock-agentcore:InvokeWebSearch'],
+        resources: [`arn:aws:bedrock-agentcore:${this.region}:aws:tool/web-search.v1`],
+      }),
+    );
+
+    const memoryRole = new iam.Role(this, 'MemoryRole', {
+      assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'),
+      description: `AgentCore Memory extraction role for the ${envName} scraper`,
+    });
+    memoryRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: [
+          `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/${BEDROCK_INFERENCE_PROFILE_ID}`,
+          'arn:aws:bedrock:*::foundation-model/anthropic.claude-*',
+        ],
+      }),
+    );
+
+    // aws-cdk-lib 2.261 does not yet ship L1/L2 constructs for these; raw
+    // CloudFormation types are current and what the AgentCore docs use.
+    const gateway = new cdk.CfnResource(this, 'WebSearchGateway', {
+      type: 'AWS::BedrockAgentCore::Gateway',
+      properties: {
+        Name: `btfp-${envName}-scraper-search`,
+        Description: 'Managed web search for the pet-hazard scraper',
+        RoleArn: gatewayRole.roleArn,
+        ProtocolType: 'MCP',
+        AuthorizerType: 'AWS_IAM',
+      },
+    });
+
+    new cdk.CfnResource(this, 'WebSearchTarget', {
+      type: 'AWS::BedrockAgentCore::GatewayTarget',
+      properties: {
+        GatewayIdentifier: gateway.getAtt('GatewayIdentifier'),
+        Name: 'web-search',
+        Description: 'AgentCore Web Search connector',
+        TargetConfiguration: {
+          Mcp: {
+            Connector: {
+              Source: { ConnectorId: 'web-search' },
+              Configurations: [{ Name: 'WebSearch', ParameterValues: {} }],
+            },
+          },
+        },
+        CredentialProviderConfigurations: [{ CredentialProviderType: 'GATEWAY_IAM_ROLE' }],
+      },
+    });
+
+    const memory = new cdk.CfnResource(this, 'ScraperMemory', {
+      type: 'AWS::BedrockAgentCore::Memory',
+      properties: {
+        Name: `btfp_${envName}_scraper`,
+        Description: 'Remembers trending topics the scraper has already researched',
+        EventExpiryDuration: 365,
+        MemoryExecutionRoleArn: memoryRole.roleArn,
+        MemoryStrategies: [
+          {
+            SemanticMemoryStrategy: {
+              Name: 'scraperFacts',
+              Namespaces: ['/scraper/{actorId}'],
+            },
+          },
+        ],
+      },
+    });
 
     const vpc = new ec2.Vpc(this, 'ScraperVpc', {
       maxAzs: 2,
@@ -50,12 +124,8 @@ export class ScraperStack extends cdk.Stack {
       memoryLimitMiB: 512,
     });
 
-    grantSsmConfigRead(taskDef.taskRole, { namespace: 'btfp', env: props.envConfig.envName });
     props.contentTable.grantReadWriteData(taskDef.taskRole);
 
-    // Cross-region inference profiles need permission on both the profile
-    // itself and the underlying foundation models it can route requests to
-    // — same scoping api-stack.ts already uses for the bff Lambda.
     taskDef.taskRole.addToPrincipalPolicy(
       new iam.PolicyStatement({
         actions: ['bedrock:InvokeModel'],
@@ -63,6 +133,37 @@ export class ScraperStack extends cdk.Stack {
           `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/${BEDROCK_INFERENCE_PROFILE_ID}`,
           'arn:aws:bedrock:*::foundation-model/anthropic.claude-*',
         ],
+      }),
+    );
+
+    taskDef.taskRole.addToPrincipalPolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'bedrock-agentcore:StartBrowserSession',
+          'bedrock-agentcore:StopBrowserSession',
+          'bedrock-agentcore:GetBrowserSession',
+          'bedrock-agentcore:UpdateBrowserStream',
+        ],
+        resources: ['*'],
+      }),
+    );
+
+    taskDef.taskRole.addToPrincipalPolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock-agentcore:InvokeGateway'],
+        resources: [gateway.getAtt('GatewayArn').toString()],
+      }),
+    );
+
+    taskDef.taskRole.addToPrincipalPolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'bedrock-agentcore:CreateEvent',
+          'bedrock-agentcore:RetrieveMemoryRecords',
+          'bedrock-agentcore:ListMemoryRecords',
+          'bedrock-agentcore:GetMemoryRecord',
+        ],
+        resources: [memory.getAtt('MemoryArn').toString()],
       }),
     );
 
@@ -76,16 +177,17 @@ export class ScraperStack extends cdk.Stack {
         platform: Platform.LINUX_AMD64,
       }),
       environment: {
-        STAGE: props.envConfig.envName,
+        STAGE: envName,
+        AWS_REGION: this.region,
         CONTENT_TABLE_NAME: props.contentTable.tableName,
         BEDROCK_INFERENCE_PROFILE_ID,
+        AGENTCORE_GATEWAY_URL: gateway.getAtt('GatewayUrl').toString(),
+        AGENTCORE_MEMORY_ID: memory.getAtt('MemoryId').toString(),
       },
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'scraper', logGroup }),
     });
 
     const rule = new events.Rule(this, 'ScheduleRule', {
-      // Arbitrary starting cadence — easy to tune later based on observed
-      // post volume and Bedrock cost.
       schedule: events.Schedule.rate(cdk.Duration.hours(6)),
     });
 
@@ -101,5 +203,7 @@ export class ScraperStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, 'ClusterArn', { value: cluster.clusterArn });
     new cdk.CfnOutput(this, 'TaskDefinitionArn', { value: taskDef.taskDefinitionArn });
+    new cdk.CfnOutput(this, 'GatewayUrl', { value: gateway.getAtt('GatewayUrl').toString() });
+    new cdk.CfnOutput(this, 'MemoryId', { value: memory.getAtt('MemoryId').toString() });
   }
 }

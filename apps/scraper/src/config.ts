@@ -1,35 +1,40 @@
-import { loadSsmConfig } from '@bubltec/mycota-config';
-import { DEFAULT_SUBREDDITS } from './subreddits.js';
+import {
+  DEFAULT_TRENDS_CATEGORY,
+  DEFAULT_TRENDS_GEO,
+  DEFAULT_TRENDS_HOURS,
+} from './trends/types.js';
 
 export interface ScraperConfig {
   env: string;
-  redditClientId: string;
-  redditClientSecret: string;
+  region: string;
   bedrockInferenceProfileId: string;
-  subreddits: string[];
+  agentCoreGatewayUrl: string;
+  agentCoreMemoryId: string;
+  trendsGeo: string;
+  trendsHours: number;
+  trendsCategory: number;
+  maxTopicsPerRun: number;
+  maxSearchResults: number;
 }
 
 const DEFAULT_MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 
 /**
- * Non-secret config (STAGE, BEDROCK_INFERENCE_PROFILE_ID, SCRAPER_SUBREDDITS)
- * comes in as plain env vars baked into the Fargate task definition, same
- * split as the rest of this repo. Reddit credentials come from SSM at
- * runtime — the task role is granted read access via grantSsmConfigRead,
- * not baked in at synth time.
+ * All config is env vars baked into the Fargate task definition. No Reddit
+ * (or other third-party) secrets — AgentCore Browser / Gateway / Memory
+ * authenticate via the task role.
  */
-export async function loadConfig(): Promise<ScraperConfig> {
-  const env = process.env.STAGE ?? 'dev';
-  const ssm = await loadSsmConfig({ namespace: 'btfp', env });
-  const subredditsEnv = process.env.SCRAPER_SUBREDDITS;
-
+export function loadConfig(): ScraperConfig {
   return {
-    env,
-    redditClientId: ssm['reddit-client-id'] ?? '',
-    redditClientSecret: ssm['reddit-client-secret'] ?? '',
+    env: process.env.STAGE ?? 'dev',
+    region: process.env.AWS_REGION ?? 'us-east-1',
     bedrockInferenceProfileId: process.env.BEDROCK_INFERENCE_PROFILE_ID ?? DEFAULT_MODEL_ID,
-    subreddits: subredditsEnv
-      ? subredditsEnv.split(',').map((s) => s.trim()).filter(Boolean)
-      : DEFAULT_SUBREDDITS,
+    agentCoreGatewayUrl: process.env.AGENTCORE_GATEWAY_URL ?? '',
+    agentCoreMemoryId: process.env.AGENTCORE_MEMORY_ID ?? '',
+    trendsGeo: process.env.TRENDS_GEO ?? DEFAULT_TRENDS_GEO,
+    trendsHours: Number(process.env.TRENDS_HOURS ?? DEFAULT_TRENDS_HOURS),
+    trendsCategory: Number(process.env.TRENDS_CATEGORY ?? DEFAULT_TRENDS_CATEGORY),
+    maxTopicsPerRun: Number(process.env.MAX_TOPICS_PER_RUN ?? 8),
+    maxSearchResults: Number(process.env.MAX_SEARCH_RESULTS ?? 5),
   };
 }

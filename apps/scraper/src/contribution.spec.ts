@@ -1,18 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { mockClient } from 'aws-sdk-client-mock';
+import { mockAws } from './test-utils.js';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { SCRAPER_CONTRIBUTOR_ID, writeContribution } from './contribution.js';
-import type { RedditPost } from './reddit/types.js';
+import type { CandidateDocument } from './search/types.js';
 import type { ExtractionResult } from './extract/types.js';
 
-const post: RedditPost = {
-  id: 'abc123',
-  title: 'title',
-  selftext: 'body',
-  permalink: '/r/dogs/comments/abc123/my_dog_ate_a_sock/',
-  created_utc: 1700000000,
-  stickied: false,
+const document: CandidateDocument = {
+  id: 'sock',
+  title: 'sock',
+  body: 'Dog ate a sock.',
+  sourceUrl: 'https://example.com/sock',
+  source: 'web-search',
+  topic: 'sock',
 };
 
 const extraction: ExtractionResult = {
@@ -26,12 +26,12 @@ const extraction: ExtractionResult = {
 
 describe('writeContribution', () => {
   it("writes an item matching contributions.service.ts propose()'s exact key shape", async () => {
-    const db = mockClient(DynamoDBDocumentClient);
+    const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
 
     const contribution = await writeContribution(
       DynamoDBDocumentClient.from(new DynamoDBClient({})),
-      post,
+      document,
       extraction,
     );
 
@@ -47,29 +47,29 @@ describe('writeContribution', () => {
     expect(item.thingId).toBeUndefined();
   });
 
-  it('builds payload.sourceUrl from the real Reddit permalink and preserves severity/petType', async () => {
-    const db = mockClient(DynamoDBDocumentClient);
+  it('preserves the search source URL, severity, and trend term', async () => {
+    const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
 
     const contribution = await writeContribution(
       DynamoDBDocumentClient.from(new DynamoDBClient({})),
-      post,
+      document,
       extraction,
     );
 
-    expect(contribution.payload.source).toBe('reddit');
-    expect(contribution.payload.sourceUrl).toBe(`https://reddit.com${post.permalink}`);
+    expect(contribution.payload.source).toBe('web-search');
+    expect(contribution.payload.sourceUrl).toBe(document.sourceUrl);
     expect(contribution.payload.petTypes).toEqual([{ petTypeId: 'dog', severity: 'moderate' }]);
-    expect(contribution.payload.details).toMatchObject({ redditPostId: post.id });
+    expect(contribution.payload.details).toMatchObject({ trendTerm: 'sock' });
   });
 
   it('defaults to an empty petTypes array when the extraction has no petTypeId', async () => {
-    const db = mockClient(DynamoDBDocumentClient);
+    const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
 
     const contribution = await writeContribution(
       DynamoDBDocumentClient.from(new DynamoDBClient({})),
-      post,
+      document,
       { ...extraction, petTypeId: undefined },
     );
 
@@ -77,12 +77,12 @@ describe('writeContribution', () => {
   });
 
   it('attaches to an existing Thing when the extracted name matches the catalog', async () => {
-    const db = mockClient(DynamoDBDocumentClient);
+    const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
 
     const contribution = await writeContribution(
       DynamoDBDocumentClient.from(new DynamoDBClient({})),
-      post,
+      document,
       { ...extraction, thingName: 'Chocolate', thingTypeId: 'food' },
       [
         {

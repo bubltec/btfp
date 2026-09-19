@@ -14,4 +14,7 @@ await build({
   sourcemap: true,
   minify: true,
   logLevel: 'info',
+  // Playwright talks to a remote AgentCore Browser over CDP — keep the
+  // package unbundled so its own loader stays intact in the image.
+  external: ['playwright-core'],
 });
