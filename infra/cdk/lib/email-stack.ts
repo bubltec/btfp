@@ -15,7 +15,7 @@ import {
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HOSTED_ZONE_ID, ROOT_DOMAIN, FORWARD_TO_ADDRESS } from './config.js';
-import { publishLiveAliasWithCanary } from './lambda-canary.js';
+import { publishLiveAlias } from './lambda-canary.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -99,7 +99,7 @@ export class EmailStack extends cdk.Stack {
       },
     });
 
-    const live = publishLiveAliasWithCanary(forwarderFn);
+    const live = publishLiveAlias(forwarderFn, 'AllAtOnce');
 
     mailBucket.grantRead(forwarderFn);
     forwarderFn.addToRolePolicy(

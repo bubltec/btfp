@@ -23,10 +23,9 @@ is the fallback for hotfixes or debugging a broken pipeline).
 4. **`deploy-dev`** — assumes the deploy role via OIDC, runs `cdk deploy BtfpDev/*`. The BFF
    Lambda is a container image (`apps/bff/Dockerfile`, `DockerImageCode.fromImageAsset` in
    `infra/cdk/lib/api-stack.ts`) — the Docker build and push to ECR happen automatically inside
-   this one `cdk deploy` call. API Gateway invokes the function's `live` alias, not `$LATEST`:
-   CodeDeploy canaries 10% of traffic for 5 minutes and rolls the alias back if the new version
-   (or the alias) reports any Lambda Errors. `cdk deploy` waits for that shift to finish, so this
-   job runs ~5 minutes longer whenever the BFF image actually changed. Dev is never prerendered
+   this one `cdk deploy` call.    API Gateway invokes the function's `live` alias, not `$LATEST` (SAM
+   `AutoPublishAlias` + `DeploymentPreference: AllAtOnce` on dev — no 5-minute
+   canary wait). Dev is never prerendered
    (Basic-Auth-walled, `noindex` — see [docs/seo.md](./seo.md)), so that's the whole job.
 5. **`e2e`** — warms dev's BFF with a cheap `GET /api/pet-types` (Nest container cold start
    after deploy), then runs `apps/e2e`'s Playwright suite against
@@ -204,11 +203,10 @@ Not automatable from CDK — these are GitHub repo settings.
   email sign-up against dev's actual DynamoDB tables on every run. Accepted rather than built
   around — dev isn't a pristine/indexed environment anyway. Wipe/reseed it periodically by hand
   if it gets noisy (`docs/infra.md` has the seed command).
-- **Lambda canary watches AWS/Lambda Errors, not Nest HTTP 5xx.** A handler that returns a 500
-  JSON body is still a successful invocation, so CodeDeploy will not roll back for that.
-  Crashes, timeouts, init failures, and unhandled exceptions do trip the alarm. The first
-  deploy that creates the `live` alias is not a canary (nothing previous to shift from); every
-  later version change is. Static web assets (S3 + CloudFront) are still an in-place overwrite.
+- **Prod Lambda canary watches AWS/Lambda Errors, not Nest HTTP 5xx.** A handler that returns a
+  500 JSON body is still a successful invocation, so SAM's `Canary10Percent5Minutes` will not
+  roll back for that. Dev uses `AllAtOnce`. Static web assets (S3 + CloudFront) are still an
+  in-place overwrite.
 - **A `prod-diff`/`deploy-prod` failure between the two `BtfpProd` deploys leaves prod running
   new API/DB code with stale web assets** until the job is re-run or the prerender+web-deploy
   steps are run manually (same commands `docs/infra.md` documents). This is visible (a red job
