@@ -107,12 +107,24 @@ Two things worth knowing about what this automation trades off:
     tracks whether each gitignored file actually loaded and skips reconciliation entirely unless
     both did, logging why. Only a full local run (with both files present) is a complete enough
     view of the catalog to safely reconcile against.
-- **`BatchWriteItem`/retries `UnprocessedItems` instead of dropping them.** A `BatchWriteCommand`
+- **`BatchWriteItem` retries `UnprocessedItems` instead of dropping them.** A `BatchWriteCommand`
   can return a 200 with some items still unprocessed (throttling) — the SDK doesn't retry those
-  for you, and code that ignores `UnprocessedItems` silently loses rows. This bit us once in
-  practice: a seed run logged "345 things" written, but only 338 actually landed in the table.
-  `run.ts` now retries any `UnprocessedItems` with backoff and throws (failing the run loudly)
-  rather than finishing "successfully" with rows quietly missing.
+  for you, and code that ignores `UnprocessedItems` silently loses rows. `run.ts` now retries any
+  `UnprocessedItems` with backoff and throws (failing the run loudly) rather than finishing
+  "successfully" with rows quietly missing. (This turned out not to be the actual cause the one
+  time rows went missing in practice — see the next point — but it's a real gap worth closing
+  regardless.)
+- **Deleting `discarded` rows by id can delete the row you just wrote, for multi-source merges.**
+  `discarded` (from `dedupeThings`) holds the *raw*, pre-merge rows that got folded into a
+  canonical entry. Stable ids are a hash of `thingTypeId`+`name`, so two rows for the *same* item
+  from different sources — "Garlic" from ASPCA and "Garlic" from vetmeds, say — legitimately share
+  an id with the merged canonical row that gets kept. Deleting `discarded` rows by `thing.id`
+  without checking whether that id is also in this run's kept set deletes the just-written
+  canonical row right back out. This is exactly how a real seed run once ended up 7 things short
+  (345 reported written, 338 actually in the table) even with the `UnprocessedItems` retry above
+  in place and zero errors thrown — the missing 7 were precisely the multi-source-merged entries
+  (Garlic, Onion, Chives, Grapes, Raisins, Pseudoephedrine, Phenylephrine). `computeDiscardedKeys`
+  now filters out any discarded id still present in `keepIds` before building delete keys.
 - **Scoped IAM grant.** `infra/cdk/lib/ci-stack.ts`'s GitHub Actions deploy role is otherwise kept
   to `sts:AssumeRole` on CDK's own bootstrap roles only (see that file's comments) — seeding is
   the one exception, a narrow `dynamodb:BatchWriteItem` grant on exactly the prod content table.

@@ -99,6 +99,26 @@ async function batchDelete(db: DynamoDBDocumentClient, keys: { PK: string; SK: s
  * left alone even if its id happens to collide with a stable id this run
  * no longer emits.
  */
+/**
+ * `discarded` (from `dedupeThings`) holds the raw pre-merge rows folded into
+ * a canonical entry — but stableId is a hash of thingTypeId+name, so two
+ * rows for the *same* item from different sources (e.g. "Garlic" from ASPCA
+ * + "Garlic" from vetmeds) legitimately share an id with the merged
+ * canonical row that's kept. Deleting blindly by `thing.id` would delete
+ * the just-written canonical row right back out — this silently dropped
+ * exactly the multi-source-merged entries (Garlic, Onion, Chives, Grapes,
+ * Raisins, Pseudoephedrine, Phenylephrine) from a real seed run. Anything
+ * whose id is still in `keepIds` must be left alone.
+ */
+export function computeDiscardedKeys(
+  discarded: Thing[],
+  keepIds: Set<string>,
+): { PK: string; SK: string }[] {
+  return discarded
+    .map((thing) => ({ PK: `THING#${thing.id}`, SK: 'META' }))
+    .filter((key) => !keepIds.has(key.PK.slice('THING#'.length)));
+}
+
 export async function findOrphanedSeedThingKeys(
   db: DynamoDBDocumentClient,
   keepIds: Set<string>,
@@ -210,7 +230,7 @@ async function main() {
   await batchWrite(db, uniqueThings.map(thingItem));
 
   const keepIds = new Set(uniqueThings.map((thing) => thing.id));
-  const discardedKeys = discarded.map((thing) => ({ PK: `THING#${thing.id}`, SK: 'META' }));
+  const discardedKeys = computeDiscardedKeys(discarded, keepIds);
   // Orphan reconciliation (see findOrphanedSeedThingKeys doc comment) is only
   // safe when this run's `things` reflects the *complete* intended catalog —
   // otherwise "not in this run's output" just means "this run's environment
