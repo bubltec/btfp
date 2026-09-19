@@ -13,6 +13,19 @@ public — redistributing it under this repo's license isn't something to do wit
 ASPCA's sign-off. Keep your own local copy at that path to run `pnpm seed:local`; ask
 whoever gave you the original dataset for a copy if you don't have one.
 
+**A handful of culinary Alliums are double-listed in the raw dataset itself.** ASPCA's own
+`plants_toxic_to_dogs` list and `foods` list both independently include Onion, Garlic, Leek, and
+Chives — same species, same hazard, just entered from two angles (garden plant vs. dietary
+ingredient). The plants-list version carries no severity/dose data (that only exists on the foods
+side) but does carry `also_toxic_to` cat/horse flags the foods list lacks entirely. Left as
+`thingTypeId: 'plant'`, these would sit forever as a strictly-inferior duplicate card next to the
+real (severity-bearing) entry — `dedupeThings` only merges matching `thingTypeId`+name, so a
+`plant` row and a `food` row for "Garlic" never collapse into one. `transformDataset` routes any
+plant-list entry whose name also appears on the foods list into `thingTypeId: 'food'` instead, so
+it merges into the same canonical row (keeping the cat/horse flags). This is name-match generic,
+not a hardcoded species list, so a future ASPCA update adding more overlap is handled the same way
+automatically.
+
 ## vetmeds.org (American College of Veterinary Pharmacists)
 
 `data/seed/src/scrape-vetmeds.ts` pulls ~106 professionally-authored toxin

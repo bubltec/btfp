@@ -418,6 +418,21 @@ describe('local seed datasets', () => {
       expect(nicotine).toHaveLength(1);
       expect(nicotine[0]?.details.clinicalSigns).toBeTruthy();
       expect(nicotine[0]?.details.dose_concern_mg_per_kg).toBeTruthy();
+
+      // Regression: ASPCA's own dataset independently lists Onion/Garlic/Leek/
+      // Chives on both its toxic-plants list and its foods list — same
+      // species, same hazard, no severity data on the plant-list side.
+      // transformDataset routes those into thingTypeId 'food' so they merge
+      // into one row instead of surfacing as a strictly-inferior duplicate
+      // card (Plant/Unknown next to Food/Severe).
+      for (const name of ['Onion', 'Garlic', 'Leek', 'Chives']) {
+        const matches = kept.filter((t) => t.name === name);
+        expect(matches, `expected exactly one "${name}" row`).toHaveLength(1);
+        expect(matches[0]?.thingTypeId).toBe('food');
+        // The plant listing's also_toxic_to flags horse coverage that the
+        // foods list alone doesn't carry — must survive the merge.
+        expect(matches[0]?.petTypes.map((p) => p.petTypeId)).toContain('horse');
+      }
     },
   );
 });
