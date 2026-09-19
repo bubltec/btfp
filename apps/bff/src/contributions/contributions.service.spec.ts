@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { CreateContributionDto } from './dto/create-contribution.dto.js';
-import { mockClient } from 'aws-sdk-client-mock';
+import { mockAws } from '../test-utils.js';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { ContributionsService } from './contributions.service.js';
@@ -22,7 +22,7 @@ const pipe = new ValidationPipe({ whitelist: true, transform: true });
 
 describe('ContributionsService.propose', () => {
   it('plainifies ValidationPipe class instances before PutCommand', async () => {
-    const db = mockClient(DynamoDBDocumentClient);
+    const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
 
     const dto = (await pipe.transform(e2ePayload, {
@@ -46,7 +46,7 @@ describe('ContributionsService.propose', () => {
   });
 
   it('writes the same DynamoDB item shape as the scraper (new thing, no duplicate)', async () => {
-    const db = mockClient(DynamoDBDocumentClient);
+    const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
 
     const search = {
@@ -84,7 +84,7 @@ describe('ContributionsService.propose', () => {
   });
 
   it('ignores a blank duplicate id and creates a new Thing partition', async () => {
-    const db = mockClient(DynamoDBDocumentClient);
+    const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
 
     const search = {
@@ -107,7 +107,7 @@ describe('ContributionsService.propose', () => {
   });
 
   it('attaches to an existing Thing id when findDuplicate matches', async () => {
-    const db = mockClient(DynamoDBDocumentClient);
+    const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
 
     const search = {
