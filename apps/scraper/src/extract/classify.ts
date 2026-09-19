@@ -1,13 +1,14 @@
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
-import type { RedditPost } from '../reddit/types.js';
+import type { CandidateDocument } from '../search/types.js';
 import type { ExtractionResult, Taxonomy } from './types.js';
 
 const SEVERITIES = ['mild', 'moderate', 'severe', 'unknown'] as const;
 
-function buildPrompt(post: RedditPost): string {
+function buildPrompt(document: CandidateDocument): string {
   return (
-    `A Reddit post, possibly describing a pet getting into something dangerous:\n\n` +
-    `Title: ${post.title}\n\nBody: ${post.selftext || '(no body text)'}`
+    `Web search results about a currently trending topic that may or may not be a pet hazard.\n\n` +
+    `Topic: ${document.title}\n\n` +
+    `Sources:\n${document.body}`
   );
 }
 
@@ -15,27 +16,27 @@ function buildPrompt(post: RedditPost): string {
  * A signal for the human moderator, not a gate — every extraction lands as
  * an unverified Contribution regardless of confidence; nothing here ever
  * writes a verified Thing directly. If Bedrock is unavailable or the
- * response is malformed, returns null so the caller just skips the post
+ * response is malformed, returns null so the caller just skips the topic
  * rather than blocking the whole run.
  */
-export async function classifyPost(
+export async function classifyDocument(
   client: BedrockRuntimeClient,
   modelId: string,
-  post: RedditPost,
+  document: CandidateDocument,
   taxonomy: Taxonomy,
 ): Promise<ExtractionResult | null> {
   try {
     const response = await client.send(
       new ConverseCommand({
         modelId,
-        messages: [{ role: 'user', content: [{ text: buildPrompt(post) }] }],
+        messages: [{ role: 'user', content: [{ text: buildPrompt(document) }] }],
         toolConfig: {
           tools: [
             {
               toolSpec: {
                 name: 'extract_pet_hazard',
                 description:
-                  'Determine whether a Reddit post describes a real pet-hazard incident and extract structured details if so.',
+                  'Determine whether these sources describe a real pet hazard and extract structured details if so.',
                 inputSchema: {
                   json: {
                     type: 'object',

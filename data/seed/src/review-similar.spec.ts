@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { mockClient } from 'aws-sdk-client-mock';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 import type { Thing } from '@btfp/shared-types';
 import { looksLikeComboName, reviewCatalog, reviewComboCandidate } from './review-similar.js';
+import { mockAws } from './test-utils.js';
 
 function thing(overrides: Partial<Thing> & Pick<Thing, 'id' | 'name' | 'thingTypeId'>): Thing {
   return {
@@ -44,7 +44,7 @@ describe('looksLikeComboName', () => {
 
 describe('reviewComboCandidate', () => {
   it('sends a forced tool-use request and parses the result', async () => {
-    const bedrock = mockClient(BedrockRuntimeClient);
+    const bedrock = mockAws(BedrockRuntimeClient);
     bedrock.on(ConverseCommand).resolves({
       output: {
         message: {
@@ -88,7 +88,7 @@ describe('reviewComboCandidate', () => {
   });
 
   it('returns null when the response has no tool-use block', async () => {
-    const bedrock = mockClient(BedrockRuntimeClient);
+    const bedrock = mockAws(BedrockRuntimeClient);
     bedrock
       .on(ConverseCommand)
       .resolves({ output: { message: { role: 'assistant', content: [] } } });
@@ -99,7 +99,7 @@ describe('reviewComboCandidate', () => {
   });
 
   it('returns null instead of throwing when the Bedrock call fails', async () => {
-    const bedrock = mockClient(BedrockRuntimeClient);
+    const bedrock = mockAws(BedrockRuntimeClient);
     bedrock.on(ConverseCommand).rejects(new Error('throttled'));
 
     const client = new BedrockRuntimeClient({});
@@ -110,7 +110,7 @@ describe('reviewComboCandidate', () => {
 
 describe('reviewCatalog', () => {
   it('only calls Bedrock for combo-looking names, and only keeps flagged combos', async () => {
-    const bedrock = mockClient(BedrockRuntimeClient);
+    const bedrock = mockAws(BedrockRuntimeClient);
     bedrock.on(ConverseCommand).resolves({
       output: {
         message: {

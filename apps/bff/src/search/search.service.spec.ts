@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mockClient } from 'aws-sdk-client-mock';
+import { mockAws } from '../test-utils.js';
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { SearchService } from './search.service.js';
@@ -7,7 +7,7 @@ import type { BreedsService } from '../breeds/breeds.service.js';
 
 describe('SearchService.findDuplicate', () => {
   it('falls back to PK when META rows are missing id', async () => {
-    const db = mockClient(DynamoDBDocumentClient);
+    const db = mockAws(DynamoDBDocumentClient);
     db.on(ScanCommand).resolves({
       Items: [
         {
@@ -36,7 +36,7 @@ describe('SearchService.findDuplicate', () => {
   });
 
   it('does not throw when the catalog contains malformed Thing rows', async () => {
-    const db = mockClient(DynamoDBDocumentClient);
+    const db = mockAws(DynamoDBDocumentClient);
     db.on(ScanCommand).resolves({
       Items: [
         {

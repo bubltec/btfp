@@ -47,32 +47,6 @@ const MAPPINGS: SecretMapping[] = [
     ssmName: '/btfp/shared/brave-search-api-key',
     cdkVar: 'BTFP_BRAVE_SEARCH_API_KEY',
   },
-  // Read directly by the scraper task at runtime via @mycota/config's
-  // loadSsmConfig (IAM-granted via grantSsmConfigRead), not baked into CDK
-  // synth like the other cdkVars above — these entries exist purely so
-  // push/sync can manage them from the same local .env.deploy.local
-  // workflow. Per-env, not shared: separate dev/prod Reddit apps avoid dev
-  // testing burning prod's rate-limit budget.
-  {
-    scope: 'dev',
-    ssmName: '/btfp/dev/reddit-client-id',
-    cdkVar: 'BTFP_DEV_REDDIT_CLIENT_ID',
-  },
-  {
-    scope: 'dev',
-    ssmName: '/btfp/dev/reddit-client-secret',
-    cdkVar: 'BTFP_DEV_REDDIT_CLIENT_SECRET',
-  },
-  {
-    scope: 'prod',
-    ssmName: '/btfp/prod/reddit-client-id',
-    cdkVar: 'BTFP_PROD_REDDIT_CLIENT_ID',
-  },
-  {
-    scope: 'prod',
-    ssmName: '/btfp/prod/reddit-client-secret',
-    cdkVar: 'BTFP_PROD_REDDIT_CLIENT_SECRET',
-  },
 ];
 
 function mappingsForEnv(env: Env): SecretMapping[] {

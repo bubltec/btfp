@@ -3,7 +3,7 @@ import { createDynamoClient } from './dynamo.js';
 import { run } from './run.js';
 
 async function main(): Promise<void> {
-  const config = await loadConfig();
+  const config = loadConfig();
   const db = createDynamoClient();
   await run(config, db);
 }

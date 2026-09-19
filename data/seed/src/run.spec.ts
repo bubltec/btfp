@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BatchWriteCommand, DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { mockClient } from 'aws-sdk-client-mock';
+import { mockAws } from './test-utils.js';
 import type { Thing } from '@btfp/shared-types';
 import {
   findOrphanedSeedThingKeys,
@@ -46,7 +46,7 @@ describe('computeDiscardedKeys', () => {
 });
 
 describe('findOrphanedSeedThingKeys', () => {
-  const ddbMock = mockClient(DynamoDBDocumentClient);
+  const ddbMock = mockAws(DynamoDBDocumentClient);
   const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
   beforeEach(() => {
@@ -120,7 +120,7 @@ describe('findOrphanedSeedThingKeys', () => {
 });
 
 describe('batchWrite', () => {
-  const ddbMock = mockClient(DynamoDBDocumentClient);
+  const ddbMock = mockAws(DynamoDBDocumentClient);
   const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
   beforeEach(() => {

@@ -1,0 +1,8 @@
+{
+  "name": "btfp-scraper-runtime",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "playwright-core": "^1.55.0"
+  }
+}

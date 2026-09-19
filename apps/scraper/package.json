@@ -10,12 +10,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-crypto/sha256-js": "^5.2.0",
+    "@aws-sdk/client-bedrock-agentcore": "^3.716.0",
     "@aws-sdk/client-bedrock-runtime": "^3.716.0",
     "@aws-sdk/client-dynamodb": "^3.716.0",
+    "@aws-sdk/credential-provider-node": "^3.716.0",
     "@aws-sdk/lib-dynamodb": "^3.716.0",
     "@btfp/shared-types": "workspace:*",
-    "@bubltec/mycota-config": "0.6.0",
-    "@bubltec/mycota-dynamo": "0.6.0"
+    "@smithy/protocol-http": "^5.3.10",
+    "@smithy/signature-v4": "^5.3.10",
+    "playwright-core": "^1.55.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.1",

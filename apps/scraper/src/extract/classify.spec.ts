@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { mockClient } from 'aws-sdk-client-mock';
+import { mockAws } from '../test-utils.js';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
-import { classifyPost } from './classify.js';
-import type { RedditPost } from '../reddit/types.js';
+import { classifyDocument } from './classify.js';
+import type { CandidateDocument } from '../search/types.js';
 import type { Taxonomy } from './types.js';
 
-const post: RedditPost = {
-  id: 'abc123',
-  title: 'My dog ate a sock',
-  selftext: 'He seems fine but I am worried',
-  permalink: '/r/dogs/comments/abc123/',
-  created_utc: 1700000000,
-  stickied: false,
+const document: CandidateDocument = {
+  id: 'xylitol-gum',
+  title: 'xylitol gum',
+  body: '[1] Xylitol is toxic\nhttps://example.com\nDogs can die from small amounts.',
+  sourceUrl: 'https://example.com',
+  source: 'web-search',
+  topic: 'xylitol gum',
 };
 
 const taxonomy: Taxonomy = {
@@ -19,9 +19,9 @@ const taxonomy: Taxonomy = {
   petTypeIds: ['dog', 'cat'],
 };
 
-describe('classifyPost', () => {
+describe('classifyDocument', () => {
   it('sends a forced tool-use request scoped to the live taxonomy enums', async () => {
-    const bedrock = mockClient(BedrockRuntimeClient);
+    const bedrock = mockAws(BedrockRuntimeClient);
     bedrock.on(ConverseCommand).resolves({
       output: {
         message: {
@@ -31,7 +31,7 @@ describe('classifyPost', () => {
               toolUse: {
                 toolUseId: 't1',
                 name: 'extract_pet_hazard',
-                input: { isPetHazardReport: true, thingName: 'sock', severity: 'moderate' },
+                input: { isPetHazardReport: true, thingName: 'xylitol', severity: 'severe' },
               },
             },
           ],
@@ -40,9 +40,9 @@ describe('classifyPost', () => {
     });
 
     const client = new BedrockRuntimeClient({});
-    const result = await classifyPost(client, 'model-id', post, taxonomy);
+    const result = await classifyDocument(client, 'model-id', document, taxonomy);
 
-    expect(result).toEqual({ isPetHazardReport: true, thingName: 'sock', severity: 'moderate' });
+    expect(result).toEqual({ isPetHazardReport: true, thingName: 'xylitol', severity: 'severe' });
 
     const call = bedrock.commandCalls(ConverseCommand)[0];
     const sent = call?.args[0].input;
@@ -55,22 +55,20 @@ describe('classifyPost', () => {
   });
 
   it('returns null when the response has no tool-use block', async () => {
-    const bedrock = mockClient(BedrockRuntimeClient);
-    bedrock.on(ConverseCommand).resolves({ output: { message: { role: 'assistant', content: [] } } });
+    const bedrock = mockAws(BedrockRuntimeClient);
+    bedrock
+      .on(ConverseCommand)
+      .resolves({ output: { message: { role: 'assistant', content: [] } } });
 
     const client = new BedrockRuntimeClient({});
-    const result = await classifyPost(client, 'model-id', post, taxonomy);
-
-    expect(result).toBeNull();
+    expect(await classifyDocument(client, 'model-id', document, taxonomy)).toBeNull();
   });
 
   it('returns null instead of throwing when the Bedrock call fails', async () => {
-    const bedrock = mockClient(BedrockRuntimeClient);
+    const bedrock = mockAws(BedrockRuntimeClient);
     bedrock.on(ConverseCommand).rejects(new Error('throttled'));
 
     const client = new BedrockRuntimeClient({});
-    const result = await classifyPost(client, 'model-id', post, taxonomy);
-
-    expect(result).toBeNull();
+    expect(await classifyDocument(client, 'model-id', document, taxonomy)).toBeNull();
   });
 });

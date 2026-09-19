@@ -1,81 +1,80 @@
-# Reddit-scraping pipeline
+# Pet-hazard discovery pipeline
 
 `apps/scraper` is a scheduled ECS Fargate task (not a long-running service —
-it wakes up, does one batch of work, exits) that ingests candidate
-pet-hazard reports from Reddit into the existing moderation queue. It
-**never writes a verified `Thing` directly** — every candidate lands as a
-`pending`, unverified `Contribution` (same shape `apps/bff`'s own
+it wakes up, does one batch of work, exits) that turns **currently trending
+pet-related search topics** into candidate rows on the existing moderation
+queue. It **never writes a verified `Thing` directly** — every candidate lands
+as a `pending`, unverified `Contribution` (same shape `apps/bff`'s own
 `propose()` writes), so a human moderator always has to approve it through
-the normal `ModerationPage` flow before it becomes real data. No frontend
-work was needed for this — `ModerationPage.tsx` already renders anything
-under `GSI2PK = STATUS#pending` generically.
+the normal `ModerationPage` flow before it becomes real data.
 
-## Reddit access — this is currently gated, not self-serve
-
-Reddit's [Responsible Builder Policy](https://support.reddithelp.com/hc/en-us/articles/42728983564564-Responsible-Builder-Policy)
-requires explicit approval before API access, and separate **written**
-approval for commercial use — creating a script app at
-[reddit.com/prefs/apps](https://www.reddit.com/prefs/apps) is no longer
-enough on its own. Submitting that request is a manual, one-time step on
-your side (same category as the Bedrock use-case-details form below) — the
-pipeline is built and ready regardless of where that request stands; it
-just no-ops with a clear log line until real credentials exist.
-
-Once approved: register a **script**-type app (a dedicated bot Reddit
-account, not your personal one, is recommended given rate limits and the
-`User-Agent` attribution below), then push its `client_id`/`client_secret`:
-
-```
-/btfp/dev/reddit-client-id
-/btfp/dev/reddit-client-secret
-/btfp/prod/reddit-client-id
-/btfp/prod/reddit-client-secret
-```
-
-via `pnpm secrets:push dev` / `pnpm secrets:push prod` (see
-[docs/infra.md#secrets](./infra.md#secrets)) after setting the real values
-in `infra/cdk/.env.deploy.local`. Per-env, not shared — separate dev/prod
-Reddit apps so dev testing doesn't burn prod's rate-limit budget. The task
-reads them at runtime via `@bubltec/mycota-config`'s `loadSsmConfig`, IAM-granted
-via `grantSsmConfigRead` — CDK synth never needs these values directly.
+There are no third-party API keys. Reddit access never shipped (the
+Responsible Builder Policy blocked it); that client is gone. Discovery,
+search, and "have we already collected this?" all go through Amazon Bedrock
+AgentCore, authenticated by the Fargate task role.
 
 ## How it works
 
-For each configured subreddit: fetch posts newer than a stored watermark
-(Reddit's `client_credentials` OAuth flow, no per-user login needed), skip
-already-processed posts (a dedup marker), run non-trivial posts through
-Bedrock (`us.anthropic.claude-haiku-4-5-20251001-v1:0`, same model and same
-forced-tool-use pattern as `BedrockClassifierService`) to extract
-`{ isPetHazardReport, thingName, thingTypeId, petTypeId, severity, summary }`,
-and write a `Contribution` for anything classified as a real report. Then
-advance the watermark to the newest post actually seen, whether or not it
-became a candidate.
+1. **Topic discovery** — AgentCore Browser (managed Chrome) + Playwright CDP
+   opens Google Trends **Trending Now**, filtered to Pets and Animals:
 
-`thingTypeId`/`petTypeId` are constrained to whatever actually exists in the
-Content table at run time (a live `Scan`, not a hardcoded enum) — these are
-runtime DB rows in this schema, not a fixed set.
+   `https://trends.google.com/trending?geo=US&hours=24&category=13`
+
+   (`category=13` is Pets and Animals.) That page is not covered by Trends'
+   `robots.txt` disallow (only `/explore` is). The official Google Trends API
+   is still a gated alpha and is **not** used; `TrendSource` in
+   `apps/scraper/src/trends/types.ts` is the slot to drop an API client into
+   later if that alpha opens up.
+
+2. **Skip already-collected topics** — two layers:
+   - Exact-term DynamoDB marker (`PK: SCRAPERTREND#{normalized term}`).
+   - AgentCore Memory semantic retrieve in `/scraper/btfp-scraper`, so a
+     near-duplicate of something we already researched is not re-searched
+     (and not re-billed at $7/1,000 Web Search queries).
+
+3. **Search** — AgentCore Gateway Web Search tool (`connectorId: web-search`).
+   Queries never leave AWS; no search-vendor key. Default query shape:
+   `{topic} toxic for dogs cats pets` (200-character cap).
+
+4. **Classify** — Bedrock (`us.anthropic.claude-haiku-4-5-20251001-v1:0`,
+   same forced-tool-use pattern as `BedrockClassifierService`) extracts
+   `{ isPetHazardReport, thingName, thingTypeId, petTypeId, severity, summary }`.
+   `thingTypeId`/`petTypeId` are constrained to whatever actually exists in
+   the Content table at run time (a live `Scan`).
+
+5. **Queue** — a matching name attaches to an existing Thing; otherwise the
+   candidate proposes a new one. Then the topic is marked processed and
+   written into AgentCore Memory.
 
 ## Configuration
 
-- **Subreddits**: `SCRAPER_SUBREDDITS` env var on the Fargate task
-  definition (`infra/cdk/lib/scraper-stack.ts`), comma-separated. Defaults
-  to `apps/scraper/src/subreddits.ts`'s `DEFAULT_SUBREDDITS`
-  (`dogs`, `cats`, `AskVet`, `DogAdvice`, `CatAdvice`, `Pets`).
-- **Schedule**: `events.Schedule.rate(...)` in `scraper-stack.ts`, currently
-  every 6 hours. Tune based on observed post volume / Bedrock cost.
+Baked into the Fargate task definition by `infra/cdk/lib/scraper-stack.ts`
+(no SSM secrets):
 
-## Dedup / watermarking, and how to force a re-scan
+| Env var | Default | Purpose |
+|---|---|---|
+| `AGENTCORE_GATEWAY_URL` | Gateway `GatewayUrl` | MCP endpoint for Web Search |
+| `AGENTCORE_MEMORY_ID` | Memory `MemoryId` | Long-term "already collected" store |
+| `TRENDS_GEO` | `US` | Trends geo |
+| `TRENDS_HOURS` | `24` | Trends window (4 / 24 / 48 / 168) |
+| `TRENDS_CATEGORY` | `13` | Pets and Animals |
+| `MAX_TOPICS_PER_RUN` | `8` | Cost cap per 6h run |
+| `MAX_SEARCH_RESULTS` | `5` | Hits per topic |
 
-Both live as small items in the existing Content DynamoDB table (no
-separate table):
+Schedule is `events.Schedule.rate(...)` in `scraper-stack.ts`, currently
+every 6 hours.
 
-- `PK: SCRAPERWATERMARK#{subreddit}, SK: META` — the last-seen post's
-  timestamp/id per subreddit. Delete this item (AWS console or CLI) to make
-  the next run re-fetch that subreddit's full recent history instead of
-  just what's new.
-- `PK: REDDITPOST#{postId}, SK: META` — a marker so a given post is never
-  reclassified, whether or not it became a candidate. Delete a specific
-  one to force that single post to be re-evaluated.
+If `AGENTCORE_GATEWAY_URL` is empty the task logs a skip line and exits 0
+— same fail-open the old Reddit-credential gate used, so a half-deployed
+stack does not crash-loop.
+
+## Dedup keys
+
+- `PK: SCRAPERTREND#{normalized term}, SK: META` — exact topic already
+  processed. Delete this item to force that term to be researched again.
+- AgentCore Memory records under `/scraper/btfp-scraper` — semantic near-
+  duplicates. These extract asynchronously after `CreateEvent`; the Dynamo
+  marker is what stops the *next* run immediately.
 
 ## Manually triggering a run
 
@@ -95,18 +94,15 @@ stack).
 
 ## Testing
 
-Unit tests (`pnpm --filter @btfp/scraper test`) mock all external calls —
-Reddit's `fetch`, Bedrock via `aws-sdk-client-mock`, DynamoDB via
-`aws-sdk-client-mock` — and cover the Reddit pagination/watermark logic,
-the Bedrock forced-tool-use request shape and graceful-failure behavior,
-and (most importantly) that the written `Contribution` item exactly
-matches `contributions.service.ts`'s key shape, since a mismatch there
-means candidates silently vanish from the moderation queue with no visible
-error anywhere.
+Unit tests (`pnpm --filter @btfp/scraper test`) mock AgentCore Gateway
+HTTP, AgentCore Memory, Bedrock, DynamoDB, and the Trends browser session.
+They cover query parsing, MCP result shapes, and that the written
+`Contribution` item exactly matches `contributions.service.ts`'s key shape
+— a mismatch there means candidates silently vanish from the moderation
+queue with no visible error anywhere.
 
-Before a first deploy to `BtfpDev`, run the pipeline once manually (see
-above) against a single test subreddit and confirm a real candidate shows
-up correctly in the (Basic-Auth-walled) dev site's `ModerationPage`, with a
-working `sourceUrl` link back to the real Reddit post. Only deploy to
-`BtfpProd` after that's confirmed and at least one real moderator review of
-a scraper-produced candidate has happened in dev.
+Before a first deploy of this rewrite to `BtfpDev`, run the task once
+manually and confirm a real candidate shows up on the (Basic-Auth-walled)
+dev site's `ModerationPage`, with a working `sourceUrl` back to a web
+result. Only deploy to `BtfpProd` after that's confirmed and at least one
+real moderator review of a scraper-produced candidate has happened in dev.

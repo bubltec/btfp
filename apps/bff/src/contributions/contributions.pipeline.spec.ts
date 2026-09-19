@@ -6,7 +6,7 @@ import 'reflect-metadata';
  */
 import { ValidationPipe } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
-import { mockClient } from 'aws-sdk-client-mock';
+import { mockAws } from '../test-utils.js';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { CreateContributionDto } from './dto/create-contribution.dto.js';
@@ -31,7 +31,7 @@ const e2eSubmitBody = {
 
 describe('Contributions POST pipeline (ValidationPipe → propose → PutCommand)', () => {
   it('matches the deploy e2e submit body and produces a plain Put item', async () => {
-    const db = mockClient(DynamoDBDocumentClient);
+    const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
 
     const dto = (await pipe.transform(e2eSubmitBody, {

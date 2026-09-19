@@ -2,14 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { PutCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { findDuplicateThing, type Contribution } from '@btfp/shared-types';
 import { CONTENT_TABLE_NAME } from './dynamo.js';
-import type { RedditPost } from './reddit/types.js';
+import type { CandidateDocument } from './search/types.js';
 import type { ExtractionResult } from './extract/types.js';
 import type { CatalogThing } from './taxonomy.js';
 
 /** Sentinel contributorId — never resolves to a real user. Verified safe
  * against contributions.service.ts's approve()'s `contributor?.professional`
  * optional chain, which degrades gracefully for an unresolvable id. */
-export const SCRAPER_CONTRIBUTOR_ID = 'system:reddit-scraper';
+export const SCRAPER_CONTRIBUTOR_ID = 'system:agentcore-scraper';
 
 /**
  * Exact replica of contributions.service.ts propose()'s item shape. If the
@@ -20,7 +20,7 @@ export const SCRAPER_CONTRIBUTOR_ID = 'system:reddit-scraper';
  */
 export async function writeContribution(
   db: DynamoDBDocumentClient,
-  post: RedditPost,
+  document: CandidateDocument,
   extraction: ExtractionResult,
   catalog: CatalogThing[] = [],
 ): Promise<Contribution> {
@@ -46,9 +46,9 @@ export async function writeContribution(
       petTypes: extraction.petTypeId
         ? [{ petTypeId: extraction.petTypeId, severity: extraction.severity ?? 'unknown' }]
         : [],
-      details: { summary: extraction.summary, redditPostId: post.id },
-      source: 'reddit',
-      sourceUrl: `https://reddit.com${post.permalink}`,
+      details: { summary: extraction.summary, trendTerm: document.topic },
+      source: document.source,
+      sourceUrl: document.sourceUrl,
     },
     createdAt: now,
   };

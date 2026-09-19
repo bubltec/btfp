@@ -75,9 +75,9 @@ Every relevant push to mycota's `main` publishes one of two ways:
    pnpm mycota:pull
    ```
 
-   This bumps `@bubltec/mycota-auth`/`-dynamo`/`-professional-verification` in `apps/bff`,
-   `@bubltec/mycota-config`/`-dynamo` in `apps/scraper`, and `@bubltec/mycota-cdk` in
-   `infra/cdk` to whatever `latest` (the most recent real release) currently resolves to.
+   This bumps `@bubltec/mycota-auth`/`-dynamo`/`-professional-verification` in `apps/bff` and
+   `@bubltec/mycota-cdk` in `infra/cdk` to whatever `latest` (the most recent real release)
+   currently resolves to.
    This is a **deliberate, one-time pull** — package versions are pinned at install time,
    not auto-updating, so re-run this whenever you want the newest release. To track the
    rolling prerelease instead, run `pnpm add @bubltec/mycota-x@next` for the specific
