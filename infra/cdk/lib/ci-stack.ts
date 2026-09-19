@@ -89,13 +89,16 @@ export class CiStack extends cdk.Stack {
     // writes reference content (breeds, curated hazards, plant/food data)
     // directly via the SDK, not through `cdk deploy` — so it needs its own
     // grant rather than riding the bootstrap roles' CloudFormation-exec
-    // permissions. Scoped to exactly the one table and the one action the
-    // script performs (BatchWriteItem — puts of curated rows, plus
+    // permissions. Scoped to exactly the one table and the actions the
+    // script performs: BatchWriteItem (puts of curated rows, plus
     // DeleteRequests for Thing ids retired when overlapping seed sources
-    // collapse to one row).
+    // collapse to one row within a single run), and Scan (findOrphanedSeedThingKeys
+    // reconciling against rows a *previous* run wrote for a source item since
+    // renamed/split/removed — see docs/data-sourcing.md's "Seeding prod in CI"
+    // section for why a plain BatchWriteItem-only diff can't catch those).
     this.deployRole.addToPolicy(
       new iam.PolicyStatement({
-        actions: ['dynamodb:BatchWriteItem'],
+        actions: ['dynamodb:BatchWriteItem', 'dynamodb:Scan'],
         resources: [`arn:aws:dynamodb:${AWS_REGION}:${this.account}:table/btfp-prod-content`],
       }),
     );
