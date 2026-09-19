@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto';
-import type { Breed, BreedTrait, PetToxicity, PetType, Severity, Thing, ThingType } from '@btfp/shared-types';
+import type {
+  Breed,
+  BreedTrait,
+  PetToxicity,
+  PetType,
+  Severity,
+  Thing,
+  ThingType,
+} from '@btfp/shared-types';
 
 export interface RawDataset {
   metadata: {
@@ -121,6 +129,21 @@ export const THING_TYPES: ThingType[] = [
 export function transformDataset(raw: RawDataset): Thing[] {
   const things: Thing[] = [];
 
+  // ASPCA's own dataset double-lists a handful of culinary Alliums (Onion,
+  // Garlic, Leek, Chives) on both its toxic-plants list and its foods list —
+  // same species, same hazard, just entered from two angles (garden plant
+  // vs. dietary ingredient). dedupeThings only merges matching
+  // thingTypeId+name, so left as 'plant' these would sit forever as a
+  // separate, strictly-inferior duplicate card (no severity/dose data,
+  // since only the foods list carries that) next to the real entry. Route
+  // any plant whose name matches a foods-list entry into thingTypeId
+  // 'food' instead, so it merges into the same canonical row — this keeps
+  // the plant listing's unique cat/horse also_toxic_to flags (the foods
+  // list here is dog-only) without producing a duplicate card. Generic on
+  // name match rather than a hardcoded species list, so a future ASPCA
+  // update that adds more overlap is handled the same way automatically.
+  const foodNames = new Set(raw.foods.map((food) => food.name.trim().toLowerCase()));
+
   for (const plant of raw.plants_toxic_to_dogs) {
     const petTypes: PetToxicity[] = [{ petTypeId: 'dog', severity: 'unknown' }];
     for (const other of plant.also_toxic_to ?? []) {
@@ -130,12 +153,14 @@ export function transformDataset(raw: RawDataset): Thing[] {
       }
     }
 
+    const thingTypeId = foodNames.has(plant.name.trim().toLowerCase()) ? 'food' : 'plant';
+
     things.push(
       stamp({
-        id: stableId('plant', plant.name),
+        id: stableId(thingTypeId, plant.name),
         name: plant.name,
         otherNames: plant.other_common_names ?? [],
-        thingTypeId: 'plant',
+        thingTypeId,
         petTypes,
         details: {
           scientificName: plant.scientific_name,
