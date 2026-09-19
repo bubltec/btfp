@@ -98,6 +98,21 @@ Two things worth knowing about what this automation trades off:
   those too. Rows that went through moderation — a brand-new contributor submission, or an
   approved edit merged into an existing seed row — always have `contributorId` set and are never
   touched by this cleanup, even if their id happens to match a stable id this run no longer emits.
+  - **This reconciliation only runs when both gitignored files load.** "Not in this run's output"
+    only means "genuinely renamed/removed" if this run had access to the *complete* intended
+    catalog. CI never has `dog-toxicity-dataset.json`/`vetmeds-toxins.json` (see above), so a CI
+    run's `uniqueThings` is always just the committed curated-hazards subset — running orphan
+    reconciliation there would (and once did, in production) delete every ASPCA/vetmeds-sourced
+    row as an "orphan," since none of them were in that run's necessarily-partial output. `run.ts`
+    tracks whether each gitignored file actually loaded and skips reconciliation entirely unless
+    both did, logging why. Only a full local run (with both files present) is a complete enough
+    view of the catalog to safely reconcile against.
+- **`BatchWriteItem`/retries `UnprocessedItems` instead of dropping them.** A `BatchWriteCommand`
+  can return a 200 with some items still unprocessed (throttling) — the SDK doesn't retry those
+  for you, and code that ignores `UnprocessedItems` silently loses rows. This bit us once in
+  practice: a seed run logged "345 things" written, but only 338 actually landed in the table.
+  `run.ts` now retries any `UnprocessedItems` with backoff and throws (failing the run loudly)
+  rather than finishing "successfully" with rows quietly missing.
 - **Scoped IAM grant.** `infra/cdk/lib/ci-stack.ts`'s GitHub Actions deploy role is otherwise kept
   to `sts:AssumeRole` on CDK's own bootstrap roles only (see that file's comments) — seeding is
   the one exception, a narrow `dynamodb:BatchWriteItem` grant on exactly the prod content table.

@@ -39,26 +39,50 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-async function batchWrite(db: DynamoDBDocumentClient, items: Record<string, unknown>[]) {
+const MAX_UNPROCESSED_RETRIES = 5;
+
+/**
+ * BatchWriteItem can return `UnprocessedItems` under throttling even on a
+ * 200 response — it's not an error, just a partial success, and the SDK
+ * does not retry those for you. Ignoring that (as this used to) silently
+ * drops rows: seeding prod once wrote "345 things" per its own log line,
+ * but only 338 actually landed in the table. Retries with jittered
+ * backoff; throws if items are still unprocessed after all retries so a
+ * partial seed fails loudly instead of quietly missing rows.
+ */
+async function sendBatchWithRetry(db: DynamoDBDocumentClient, requests: Record<string, unknown>[]) {
+  let remaining = requests;
+  for (let attempt = 0; attempt < MAX_UNPROCESSED_RETRIES && remaining.length > 0; attempt++) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 100 * 2 ** attempt));
+    }
+    const result = await db.send(
+      new BatchWriteCommand({ RequestItems: { [CONTENT_TABLE_NAME]: remaining } }),
+    );
+    remaining = (result.UnprocessedItems?.[CONTENT_TABLE_NAME] ?? []) as Record<string, unknown>[];
+  }
+  if (remaining.length > 0) {
+    throw new Error(
+      `${remaining.length} item(s) still unprocessed after ${MAX_UNPROCESSED_RETRIES} retries — ` +
+        `seed run aborted rather than silently dropping rows.`,
+    );
+  }
+}
+
+export async function batchWrite(db: DynamoDBDocumentClient, items: Record<string, unknown>[]) {
   for (const batch of chunk(items, BATCH_SIZE)) {
-    await db.send(
-      new BatchWriteCommand({
-        RequestItems: {
-          [CONTENT_TABLE_NAME]: batch.map((Item) => ({ PutRequest: { Item } })),
-        },
-      }),
+    await sendBatchWithRetry(
+      db,
+      batch.map((Item) => ({ PutRequest: { Item } })),
     );
   }
 }
 
 async function batchDelete(db: DynamoDBDocumentClient, keys: { PK: string; SK: string }[]) {
   for (const batch of chunk(keys, BATCH_SIZE)) {
-    await db.send(
-      new BatchWriteCommand({
-        RequestItems: {
-          [CONTENT_TABLE_NAME]: batch.map((Key) => ({ DeleteRequest: { Key } })),
-        },
-      }),
+    await sendBatchWithRetry(
+      db,
+      batch.map((Key) => ({ DeleteRequest: { Key } })),
     );
   }
 }
@@ -140,10 +164,12 @@ async function main() {
   // docs/data-sourcing.md) — optional so CI, which only has the committed
   // datasets below, can still seed those instead of crashing outright.
   const things: Thing[] = [];
+  let hasAspcaDataset = false;
   const datasetPath = path.join(__dirname, '../source/dog-toxicity-dataset.json');
   try {
     const raw = JSON.parse(await readFile(datasetPath, 'utf-8')) as RawDataset;
     things.push(...transformDataset(raw));
+    hasAspcaDataset = true;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
@@ -155,10 +181,12 @@ async function main() {
   // Gitignored, human-reviewed output of scrape-vetmeds.ts (see
   // docs/data-sourcing.md) — optional so a fresh contributor without this
   // file can still run seed:local using just the datasets above.
+  let hasVetmedsDataset = false;
   const vetmedsPath = path.join(__dirname, '../source/vetmeds-toxins.json');
   try {
     const rawVetmeds = JSON.parse(await readFile(vetmedsPath, 'utf-8')) as VetmedsToxinsDataset;
     things.push(...transformVetmedsToxins(rawVetmeds));
+    hasVetmedsDataset = true;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
@@ -183,7 +211,31 @@ async function main() {
 
   const keepIds = new Set(uniqueThings.map((thing) => thing.id));
   const discardedKeys = discarded.map((thing) => ({ PK: `THING#${thing.id}`, SK: 'META' }));
-  const orphanedKeys = await findOrphanedSeedThingKeys(db, keepIds);
+  // Orphan reconciliation (see findOrphanedSeedThingKeys doc comment) is only
+  // safe when this run's `things` reflects the *complete* intended catalog —
+  // otherwise "not in this run's output" just means "this run's environment
+  // doesn't have that source file," not "the source item was actually
+  // renamed/removed." CI never has the two gitignored datasets, so a run
+  // there only ever produces the committed curated-hazards subset; running
+  // this check there deleted all ~340 ASPCA/vetmeds-sourced rows as
+  // "orphans" the one time it ran, since none of them were in that run's
+  // (correctly) partial output. Only run it from a full local seed that has
+  // both gitignored files.
+  const orphanedKeys =
+    hasAspcaDataset && hasVetmedsDataset ? await findOrphanedSeedThingKeys(db, keepIds) : [];
+  if (!hasAspcaDataset || !hasVetmedsDataset) {
+    console.log(
+      'Skipping orphaned-row reconciliation — missing ' +
+        [
+          !hasAspcaDataset && 'dog-toxicity-dataset.json',
+          !hasVetmedsDataset && 'vetmeds-toxins.json',
+        ]
+          .filter(Boolean)
+          .join(' and ') +
+        ", so this run only has a partial catalog and can't tell a genuinely renamed/removed " +
+        'item apart from one this environment just never loads.',
+    );
+  }
   const deleteKeys = [
     ...discardedKeys,
     // discarded rows already covered above; avoid double-listing the same PK
