@@ -5,6 +5,7 @@ export * from './thing.js';
 export * from './user.js';
 export * from './contribution.js';
 export * from './contribution-queue.js';
+export * from './contribution-review.js';
 export * from './quiz.js';
 export * from './slugify.js';
 export * from './thing-identity.js';

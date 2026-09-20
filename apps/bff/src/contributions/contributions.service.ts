@@ -1,13 +1,16 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { instanceToPlain } from 'class-transformer';
 import { randomUUID } from 'node:crypto';
 import {
+  applyContributionToThing,
   clusterPendingContributions,
   contributionsMatch,
+  isReviewableContribution,
   mergeThingPayload,
-  mergeThings,
   planContributionAttach,
+  previewContribution,
   type Contribution,
+  type PendingContributionCard,
   type Thing,
   type ThingIdentity,
 } from '@btfp/shared-types';
@@ -19,6 +22,8 @@ import { PendingContributionStore, type PendingRow } from './pending-contributio
 
 @Injectable()
 export class ContributionsService {
+  private readonly log = new Logger(ContributionsService.name);
+
   constructor(
     private readonly queue: PendingContributionStore,
     private readonly things: ThingsService,
@@ -67,8 +72,67 @@ export class ContributionsService {
     return this.insertPending(payload, thingId, contributor);
   }
 
-  async listPending(limit = 50): Promise<Contribution[]> {
-    return clusterPendingContributions(await this.queue.listAll()).slice(0, limit);
+  /**
+   * The moderation queue. Rows with no name or type are left out: nobody can act on
+   * them (approve refuses them), and they used to render as "(no name)". Each card
+   * carries a preview of what approving it would change.
+   */
+  async listPending(limit = 50): Promise<PendingContributionCard[]> {
+    const reviewable = (await this.queue.listAll()).filter(isReviewableContribution);
+    const cards = clusterPendingContributions(reviewable).slice(0, limit);
+    const now = new Date().toISOString();
+    return Promise.all(cards.map((card) => this.withPreview(card, now)));
+  }
+
+  private async withPreview(card: Contribution, now: string): Promise<PendingContributionCard> {
+    try {
+      // Same lookup approve() does, so the preview matches what approval will merge into.
+      const existing = card.thingId
+        ? await this.things.getById(card.thingId)
+        : ((await this.search.findDuplicate(card.payload as ThingIdentity)) ?? null);
+      return {
+        ...card,
+        preview: {
+          changes: previewContribution(existing, card, now),
+          ...(existing && !card.thingId
+            ? { mergesInto: { id: existing.id, name: existing.name } }
+            : {}),
+          ...(card.thingId && !existing ? { targetMissing: true } : {}),
+        },
+      };
+    } catch (err) {
+      // One bad legacy row must not blank the whole queue.
+      this.log.warn(`Preview failed for contribution ${card.id}: ${String(err)}`);
+      return { ...card, preview: { changes: [], unavailable: true } };
+    }
+  }
+
+  async reject(
+    thingId: string,
+    sk: string,
+    reviewerId: string,
+    reason?: string,
+  ): Promise<{ rejected: number }> {
+    const contribution = await this.queue.get(thingId, sk);
+    if (!contribution) throw new NotFoundException('Contribution not found');
+    if (contribution.status !== 'pending') {
+      throw new BadRequestException('Contribution was already reviewed');
+    }
+    // Reject the whole card. The queue shows one card per identity (newest row, older
+    // ones folded in), so rejecting only the newest would surface an older sibling.
+    const siblings = isReviewableContribution(contribution)
+      ? (await this.queue.listAll()).filter(
+          (row) =>
+            row.SK !== contribution.SK && hasPayload(row) && contributionsMatch(contribution, row),
+        )
+      : [];
+    await this.queue.markRejected(
+      [contribution, ...siblings],
+      reviewerId,
+      new Date().toISOString(),
+      reason?.trim() || undefined,
+    );
+    return { rejected: 1 + siblings.length };
   }
 
   async approve(thingId: string, sk: string, reviewerId: string): Promise<Thing> {
@@ -76,6 +140,11 @@ export class ContributionsService {
     if (!contribution) throw new NotFoundException('Contribution not found');
     if (!hasPayload(contribution)) {
       throw new BadRequestException('Contribution is missing payload and cannot be approved');
+    }
+    if (!isReviewableContribution(contribution)) {
+      throw new BadRequestException(
+        'Contribution has no name or type and cannot be approved; reject it instead',
+      );
     }
 
     const siblings = (await this.queue.listAll()).filter(
@@ -97,30 +166,12 @@ export class ContributionsService {
       ? await this.things.getById(contribution.thingId)
       : (duplicate ?? null);
 
-    const incoming: Thing = {
-      id: existingThing?.id ?? contribution.thingId ?? thingId,
-      name: payload.name ?? existingThing?.name ?? 'Unnamed',
-      otherNames: payload.otherNames ?? existingThing?.otherNames ?? [],
-      thingTypeId: payload.thingTypeId ?? existingThing?.thingTypeId ?? 'unknown',
-      petTypes: payload.petTypes ?? existingThing?.petTypes ?? [],
-      details: payload.details ?? {},
-      source:
-        payload.source ?? existingThing?.source ?? `contributor:${contribution.contributorId}`,
-      sourceUrl: payload.sourceUrl ?? existingThing?.sourceUrl,
-      verified: true,
+    // The same function the moderation preview uses, so what a moderator saw is what happens.
+    const thing = applyContributionToThing(existingThing ?? null, payload, {
+      fallbackId: contribution.thingId ?? thingId,
       contributorId: contribution.contributorId,
-      createdAt: existingThing?.createdAt ?? now,
-      updatedAt: now,
-    };
-
-    const thing: Thing = !existingThing
-      ? incoming
-      : {
-          ...mergeThings(existingThing, incoming),
-          verified: true,
-          contributorId: contribution.contributorId,
-          updatedAt: now,
-        };
+      now,
+    });
     if (contributor?.professional?.status === 'verified') {
       thing.details = {
         ...thing.details,

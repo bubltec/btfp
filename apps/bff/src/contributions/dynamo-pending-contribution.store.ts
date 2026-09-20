@@ -108,6 +108,35 @@ export class DynamoPendingContributionStore extends PendingContributionStore {
       );
     }
   }
+
+  async markRejected(
+    rows: PendingRow[],
+    reviewerId: string,
+    now: string,
+    reason?: string,
+  ): Promise<void> {
+    for (const row of rows) {
+      if (!row.PK || !row.SK) continue;
+      await this.db.send(
+        new UpdateCommand({
+          TableName: CONTENT_TABLE_NAME,
+          Key: { PK: row.PK, SK: row.SK },
+          UpdateExpression: reason
+            ? 'SET #status = :rejected, reviewedAt = :now, reviewerId = :reviewer, reviewNotes = :reason REMOVE GSI2PK, GSI2SK'
+            : 'SET #status = :rejected, reviewedAt = :now, reviewerId = :reviewer REMOVE GSI2PK, GSI2SK',
+          // An Update creates the item when the key is missing; never resurrect a deleted row.
+          ConditionExpression: 'attribute_exists(PK)',
+          ExpressionAttributeNames: { '#status': 'status' },
+          ExpressionAttributeValues: {
+            ':rejected': 'rejected',
+            ':now': now,
+            ':reviewer': reviewerId,
+            ...(reason ? { ':reason': reason } : {}),
+          },
+        }),
+      );
+    }
+  }
 }
 
 function hasPayload(item: Contribution | undefined): item is Contribution {
