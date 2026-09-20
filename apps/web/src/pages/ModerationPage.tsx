@@ -100,8 +100,10 @@ function ContributionsSection() {
                   New entry
                 </p>
               )}
-              <p className="font-semibold text-neutral-800">{item.payload.name}</p>
-              <p className="text-sm text-neutral-500 capitalize">{item.payload.thingTypeId}</p>
+              <p className="font-semibold text-neutral-800">{item.payload?.name ?? '(no name)'}</p>
+              <p className="text-sm text-neutral-500 capitalize">
+                {item.payload?.thingTypeId ?? 'unknown type'}
+              </p>
               <button
                 onClick={() => approve(item)}
                 className="mt-2 rounded-full bg-leaf-400 px-4 py-1.5 text-sm font-semibold text-white hover:bg-leaf-600"
