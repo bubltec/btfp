@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b --noEmit",
+    "test": "vitest run",
     "cdk": "cdk",
     "secrets:push": "tsx scripts/secrets.ts push",
     "secrets:sync": "tsx scripts/secrets.ts sync"
@@ -16,7 +17,8 @@
     "@types/node": "^26.6.1",
     "aws-cdk": "^2.1131.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^2.1.0"
   },
   "dependencies": {
     "@aws-sdk/client-ssm": "^3.716.0",

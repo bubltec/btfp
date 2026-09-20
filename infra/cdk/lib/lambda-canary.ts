@@ -1,99 +1,86 @@
 import * as cdk from 'aws-cdk-lib';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as codedeploy from 'aws-cdk-lib/aws-codedeploy';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as sam from 'aws-cdk-lib/aws-sam';
 
+const ALIAS_NAME = 'current';
 const CANARY_PERIOD = cdk.Duration.minutes(1);
 
+export interface CurrentAliasOptions {
+  /**
+   * Traffic-shifting strategy for new versions. Omit for an immediate cutover:
+   * the alias simply points at the new version and CloudFormation does not wait
+   * on a CodeDeploy deployment.
+   */
+  canary?: codedeploy.ILambdaDeploymentConfig;
+}
+
+function errorAlarm(
+  scope: lambda.Function,
+  id: string,
+  description: string,
+  metric: cloudwatch.IMetric,
+): cloudwatch.Alarm {
+  return new cloudwatch.Alarm(scope, id, {
+    alarmDescription: description,
+    metric,
+    threshold: 1,
+    evaluationPeriods: 1,
+    comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+    treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+  });
+}
+
 /**
- * Turns a CDK `Function` into an `AWS::Serverless::Function` so we get SAM's
- * AutoPublishAlias / AutoPublishAliasAllProperties / DeploymentPreference
- * instead of a hand-rolled CodeDeploy `LambdaDeploymentGroup`.
+ * Publishes a `current` alias pointing at this deploy's version, and returns
+ * it. Callers must send invoke traffic at the returned alias, not `$LATEST`,
+ * or a canary never sees user traffic. Do not set `additionalVersions` on the
+ * alias; CodeDeploy owns the weights during a shift.
  *
- * `deploymentPreference` is SAM's `CfnFunction.DeploymentPreferenceProperty`.
- * `type` starts the traffic shift; `alarms` (if any) only roll it back.
- *
- * Traffic must go to the returned `:live` alias, not `$LATEST`.
- *
- * One-time migration note: a function that previously used a CDK-managed
- * `fn.addAlias('live')` (pre-SAM) has an existing `live` alias outside this
- * stack's control. SAM's `AutoPublishAlias` cannot create it while it
- * exists — CloudFormation has no reliable way to order that deletion
- * before this creation without a Ref-based custom resource depending on
- * the function, which cycles back through SAM's DependsOn propagation to
- * every resource generated from it (Version, Alias). Delete it manually,
- * once, before deploying this change:
- *   aws lambda delete-alias --function-name <physical-function-name> --name live
- * Safe to run against a function with no alias (returns ResourceNotFoundException).
- * See docs/infra.md.
+ * With `canary`, CodeDeploy shifts traffic per that config and rolls the alias
+ * back if either alarm fires: Errors on the alias, or on the new version only
+ * (an error on the old version must not fail a good deploy).
  */
-export function publishLiveAlias(
+export function publishCurrentAlias(
   fn: lambda.Function,
-  deploymentPreference: sam.CfnFunction.DeploymentPreferenceProperty,
-): lambda.IFunction {
-  // PublishVersion fails with "A version for this Lambda function exists (N)"
-  // when code+config match an already-published version. That is the usual
-  // first-deploy of AutoPublishAlias onto a function that already has versions
-  // from an earlier CDK `currentVersion` — the SAM Version resource is new to
-  // the stack, but Lambda sees no change. This env var is the configuration
-  // change that lets CreateVersion succeed; later deploys keep it.
-  fn.addEnvironment('BTFP_INVOKE_ALIAS', 'live');
-
-  fn.stack.addTransform('AWS::Serverless-2016-10-31');
-
-  const cfn = fn.node.defaultChild as lambda.CfnFunction;
-  cfn.addOverride('Type', 'AWS::Serverless::Function');
-
-  const imageUri = (cfn.code as lambda.CfnFunction.CodeProperty | undefined)?.imageUri;
-  if (imageUri) {
-    cfn.addPropertyOverride('ImageUri', imageUri);
-    cfn.addPropertyDeletionOverride('Code');
-  }
-
-  cfn.addPropertyOverride('AutoPublishAlias', 'live');
-  cfn.addPropertyOverride('AutoPublishAliasAllProperties', true);
-
-  const shifting = deploymentPreference.type && deploymentPreference.type !== 'AllAtOnce';
-  let alarms = deploymentPreference.alarms;
-  if (shifting && !alarms) {
-    const aliasErrors = new cloudwatch.Alarm(fn, 'LiveAliasErrors', {
-      alarmDescription: `${fn.node.path} live alias Errors >= 1 — SAM rolls the canary back`,
-      metric: new cloudwatch.Metric({
-        namespace: 'AWS/Lambda',
-        metricName: 'Errors',
-        statistic: 'sum',
-        period: CANARY_PERIOD,
-        dimensionsMap: {
-          FunctionName: fn.functionName,
-          Resource: `${fn.functionName}:live`,
-        },
-      }),
-      threshold: 1,
-      evaluationPeriods: 1,
-      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
-    });
-    alarms = [aliasErrors.alarmName];
-  }
-
-  cfn.addPropertyOverride('DeploymentPreference', {
-    Type: deploymentPreference.type,
-    ...(alarms ? { Alarms: alarms } : {}),
-    ...(deploymentPreference.enabled !== undefined
-      ? { Enabled: deploymentPreference.enabled }
-      : {}),
-    ...(deploymentPreference.hooks ? { Hooks: deploymentPreference.hooks } : {}),
-    ...(deploymentPreference.role ? { Role: deploymentPreference.role } : {}),
+  options: CurrentAliasOptions = {},
+): lambda.Alias {
+  const alias = new lambda.Alias(fn, 'CurrentAlias', {
+    aliasName: ALIAS_NAME,
+    version: fn.currentVersion,
   });
 
-  return lambda.Function.fromFunctionAttributes(fn, 'LiveAlias', {
-    functionArn: `${fn.functionArn}:live`,
-    role: fn.role,
-    // Without this, CDK treats the imported alias as possibly
-    // cross-account/region (fn.functionArn is a token) and silently no-ops
-    // addPermission() — grantInvoke() from HttpLambdaIntegration then adds
-    // no resource policy at all, so API Gateway gets 500s invoking it.
-    // It's always the same stack's own function, just via an alias ARN.
-    sameEnvironment: true,
+  if (!options.canary) return alias;
+
+  const aliasErrors = errorAlarm(
+    fn,
+    'CurrentAliasErrors',
+    `${fn.node.path} ${ALIAS_NAME} alias Errors >= 1 — CodeDeploy rolls the canary back`,
+    alias.metricErrors({ period: CANARY_PERIOD, statistic: 'sum' }),
+  );
+
+  const newVersionErrors = errorAlarm(
+    fn,
+    'CurrentVersionErrors',
+    `${fn.node.path} new version Errors >= 1 — CodeDeploy rolls the canary back`,
+    new cloudwatch.Metric({
+      namespace: 'AWS/Lambda',
+      metricName: 'Errors',
+      statistic: 'sum',
+      period: CANARY_PERIOD,
+      dimensionsMap: {
+        FunctionName: fn.functionName,
+        Resource: `${fn.functionName}:${ALIAS_NAME}`,
+        ExecutedVersion: fn.currentVersion.version,
+      },
+    }),
+  );
+
+  new codedeploy.LambdaDeploymentGroup(fn, 'Canary', {
+    alias,
+    deploymentConfig: options.canary,
+    alarms: [aliasErrors, newVersionErrors],
   });
+
+  return alias;
 }
