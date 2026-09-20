@@ -72,10 +72,11 @@ root-project/
 │   ├── config/
 │   └── shared-types/
 ├── scripts/
+├── .npmrc
 ├── .nvmrc
 ├── .oxfmtrc.json
 ├── .oxlintrc.json
-├── CLAUDE.md
+├── AGENTS.md / CLAUDE.md     # pointers only; the rules live in .cursor/rules/
 ├── lefthook.yml
 ├── package.json
 ├── pnpm-lock.yaml
@@ -92,13 +93,14 @@ Each file owns one concern. Put a setting in the most specific place that owns i
 | File | Owns |
 | --- | --- |
 | `package.json` | `engines`, pinned `packageManager`, root scripts that fan out through turbo |
-| `pnpm-workspace.yaml` | Workspace globs, install/supply-chain policy (`minimumReleaseAge*`), native build allowlist |
+| `pnpm-workspace.yaml` | Workspace globs, install/supply-chain policy (`minimumReleaseAge*`), native build allowlist, `saveExact`, `supportedArchitectures`, dependency `overrides` |
+| `.npmrc` | `save-exact=true` for npm and older pnpm. pnpm 11 ignores it for this setting, so `saveExact: true` in `pnpm-workspace.yaml` is the one that takes effect (tested) |
 | `tsconfig.base.json` | Strict compiler baseline for every package |
 | `packages/config/tsconfig-*.json` | Per-runtime presets (Node, React) that extend the base |
 | `turbo.json` | Task graph and cache outputs |
 | `.oxlintrc.json` / `.oxfmtrc.json` | Lint and format rules (oxlint + oxfmt, not ESLint/Prettier) |
 | `lefthook.yml` | Pre-commit lint and format on staged files |
-| `.nvmrc` | Local Node version |
+| `.nvmrc` | Node version, read locally and by every GitHub Actions job via `node-version-file: .nvmrc` |
 | `docker-compose.yml` | Local dependencies (DynamoDB Local) |
 
 ### File Naming Conventions
@@ -128,13 +130,15 @@ Each file owns one concern. Put a setting in the most specific place that owns i
 *   Model states with discriminated unions and literal types (`'dev' | 'prod'`), not booleans and strings that can drift.
 *   Validate at boundaries only: incoming HTTP bodies, external API responses, and legacy stored data. Trust internal types.
 *   Runtime is Node per `engines` in the root `package.json`. Use ES2023 features freely; do not add polyfills.
+*   **TypeScript 7 no longer auto-includes every `@types/*` package.** The Node preset sets `"types": ["node"]`, so every workspace that extends it must declare `@types/node` as its own `devDependency`. Relying on a hoisted copy compiles by accident and fails after a clean install.
 
 ## 3. BFF Practices (NestJS + Fastify on Lambda)
 
 ### Requests and validation
 
-*   The global `ValidationPipe` runs with `whitelist: true, transform: true`. Consequences you must design for:
-    *   **Every DTO property needs at least one validator decorator,** otherwise `whitelist` silently strips it.
+*   The global `ValidationPipe` is built from the one exported `VALIDATION_PIPE_OPTIONS` (`apps/bff/src/validation.ts`): `whitelist`, `forbidNonWhitelisted`, `transform`. `app.ts` and the DTO specs both import it, so tests exercise the real config. Consequences you must design for:
+    *   **An undeclared field is a 400** (`forbidNonWhitelisted`), not silently dropped. Silent dropping hid a `thingId` sent in the wrong place, so edits lost their target. When you add a field on the client, add it to the DTO in the same change.
+    *   **Every DTO property needs at least one validator decorator,** otherwise it counts as undeclared.
     *   **A required nested object needs `@IsDefined()` + `@ValidateNested()` + `@Type(() => Dto)`.** `@ValidateNested()` alone only validates the value *if present*; a body missing the property passes and later crashes as a 500 instead of returning a 400.
     *   Arrays of nested DTOs use `@IsArray()` + `@ValidateNested({ each: true })` + `@Type(...)`.
 *   Add a pipe-level regression test whenever a DTO shape changes (see `create-contribution.dto.spec.ts`): it must use the same pipe options as `app.ts`.
@@ -148,14 +152,14 @@ Each file owns one concern. Put a setting in the most specific place that owns i
 ### Configuration
 
 *   Environment variables are read in **one** place (`mycota-config.ts` and the Dynamo constants) and passed down as typed config. Do not scatter `process.env` through services.
-*   Local defaults must be obviously fake (`change-me-in-local-env`) and must never work in a deployed stage.
+*   Local defaults must be obviously fake (`change-me-in-local-env`) and must never work in a deployed stage. This is enforced, not just advised: `requireInProduction()` and `corsOrigin()` (`apps/bff/src/env.ts`) throw at startup when `NODE_ENV=production` and `JWT_SECRET` or `WEB_ORIGIN` is missing or still a `REPLACE_*`/`change-me*` placeholder. Use them for any new secret or origin instead of `?? 'default'`.
 
 ### Data access
 
 *   DynamoDB is single-table (`PK`/`SK` plus `GSI1`/`GSI2`); see `docs/data-model.md` before adding an access pattern.
 *   Use the injected `DYNAMO_DOC_CLIENT`. Never construct an SDK client inside a service.
 *   Prefer `Query` on a key or GSI. A `Scan` is acceptable only for the small, cached catalog read; paginate on `LastEvaluatedKey` and never issue one per request.
-*   After writing a `Thing`, call `SearchService.invalidate()` so the 60s cache does not serve stale rows.
+*   After writing a `Thing`, call `SearchService.invalidate()`. It clears the cache in **this container only**; other warm containers can serve the old rows for up to 60s. That is acceptable for this data, but do not rely on the cache for correctness.
 *   Data already in the table can predate a schema change. Sanitize at the read boundary rather than assuming current types.
 
 ### Lambda and cold starts
@@ -165,10 +169,17 @@ Each file owns one concern. Put a setting in the most specific place that owns i
 *   Reuse SDK clients across invocations (module scope or DI singletons). Do no heavy work at import time.
 *   Size timeouts for a cold container, not a warm one (email sign-in does DNS + fetch + Bedrock + SES in one request).
 
+### Logging and alerts
+
+*   In production the BFF logs **one JSON object per line** (`JsonLogger`, `apps/bff/src/logging/`) with `level`, `requestId`, `context`, `message`, `stack`. A stack stays inside one CloudWatch event. Use Nest's `Logger`; do not `console.log` in services.
+*   `lambda.ts` runs each invocation inside an `AsyncLocalStorage` context carrying `awsRequestId`, so every line, including cold-start logs, is tagged with its request. Filter CloudWatch on `requestId` to follow one request.
+*   The bundle keeps class names (`keepNames`) and ships its `.map`; `NODE_OPTIONS=--enable-source-maps` turns minified frames into `src/*.ts:line`. Do not remove either, or stack traces go back to `lambda.js:687:76249`.
+*   Log groups are explicit with retention (14 days dev, 30 prod). Prod has an alarm on API 5xx that emails via SNS. The SNS email subscription must be confirmed once by the recipient.
+
 ## 4. Security
 
 *   **No secrets in the repo, in `config.ts`, or in plaintext Lambda environment variables.** Store secrets as SSM `SecureString` (or Secrets Manager) and fetch them at cold start, as the GitHub client secret already does. Non-secret identifiers (client IDs, table names, region) may be plain env vars.
-*   Placeholders like `REPLACE_BEFORE_DEPLOYING_*` must fail loudly if they reach a deployed stage, never fall through to a working default.
+*   Placeholders like `REPLACE_BEFORE_DEPLOYING_*` must fail loudly if they reach a deployed stage, never fall through to a working default. Enforced for `JWT_SECRET` and `WEB_ORIGIN` by `requireInProduction()`; use it for every new secret.
 *   CI authenticates to AWS with GitHub OIDC. No long-lived access keys anywhere.
 *   IAM is least privilege (see CDK section). Any wildcard resource needs a comment that explains why a narrower scope fails.
 *   Dev stages are locked behind WAF Basic Auth. Cookies are `httpOnly` and secure in deployed stages.
@@ -192,17 +203,19 @@ Each file owns one concern. Put a setting in the most specific place that owns i
 
 ### Resources
 
-*   Prefer L2 constructs. Drop to L1 or `addPropertyOverride` only when no L2 covers it, and isolate it in a documented helper (`lambda-canary.ts` is the model: the reason, the migration caveat, and the failure mode are all written down).
+*   Prefer L2 constructs. Drop to L1 or `addPropertyOverride` only when no L2 covers it, and isolate it in a documented helper. The lesson from the Lambda alias: an SAM `AutoPublishAlias` transform plus L1 overrides was tried, needed a manual one-time `delete-alias` and five follow-up fixes (#41, #42, #44, #45, #46), and was replaced by plain `lambda.Alias` + `LambdaDeploymentGroup`. If an escape hatch needs a manual migration step, treat that as a sign to look for the native construct first.
 *   **Stateful vs stateless:** stateful resources use `RemovalPolicy.RETAIN` and point-in-time recovery in prod, `DESTROY` in dev. DynamoDB is `PAY_PER_REQUEST`.
 *   **Physical names:** do not pin explicit names on resources that may need replacement (Lambda functions, roles) because it blocks create-before-delete. Pin a name only where something external depends on it and replacement is not expected (stateful tables, the CI role), and say why.
 *   **IAM:** use `grant*` methods (`table.grantReadWriteData(fn)`) first. Hand-written `PolicyStatement`s scope actions and resources as tightly as the service allows, with a comment on any wildcard.
-*   **Lambda traffic** goes to the published `live` alias, never `$LATEST`. Prod uses a canary with an alarm that rolls back; dev uses all-at-once.
+*   **Lambda traffic** goes to the published `current` alias, never `$LATEST` (`publishCurrentAlias`, `infra/cdk/lib/lambda-canary.ts`). Prod passes a `canary` config, which creates a CodeDeploy deployment group with two rollback alarms. Dev passes none, so the alias flips immediately with no CodeDeploy wait. The alias is not named `live` because CloudFormation creates before it deletes, so reusing an existing alias name 409s.
 *   **Secrets** are referenced (SSM/Secrets Manager + `grantRead`), never inlined into the template.
 *   **Cost:** check `docs/infra.md` before adding anything with a fixed monthly cost (ALB, NAT, OpenSearch, always-on compute). The budget assumes everything scales to zero.
 
-### Verification (recommended, not adopted yet)
+### Verification
 
-*   **(recommended)** Add `aws-cdk-lib/assertions` tests under `infra/cdk` for the properties that matter: prod tables `RETAIN` + PITR on, Lambda role has no `*` actions, canary configured for prod. Run them in the turbo `test` task.
+*   CDK tests exist under `infra/cdk` (vitest + `aws-cdk-lib/assertions`, run by the turbo `test` task). `lambda-canary.spec.ts` asserts the alias, the canary group and both alarms, and the absence of a SAM `Transform`. Add a spec for any construct helper you write. `vitest.config.ts` restricts collection to `lib/**` because `cdk.out/` holds copies of other packages' specs.
+*   **Before merging an `aws-cdk-lib` bump, synth every stack before and after and diff the templates** (ignore `CDKMetadata` and content hashes). A library upgrade can change generated resources silently.
+*   **(recommended)** Extend the specs to the other properties that matter: prod tables `RETAIN` + PITR on, Lambda role has no `*` actions.
 *   **(recommended)** Add `cdk-nag` (AwsSolutions pack) as an `Aspect` in `bin/app.ts`, with each suppression carrying a written reason.
 *   **(recommended)** Apply `Tags.of(app)` for `env`, `service`, and `owner` so cost reports can be split by stage.
 
@@ -214,6 +227,8 @@ Each file owns one concern. Put a setting in the most specific place that owns i
 *   Reproduce a bug in a failing test first, then fix it. If the failure only appears deployed, pull the actual server logs (CloudWatch) instead of inferring from a generic 500.
 *   `apps/e2e` (Playwright) runs against a **deployed stage**. Assert on the response body, not only the status, so a failure explains itself.
 *   Do not add retries to an e2e test to paper over a failure until you know whether it is infrastructure flake or a real defect.
+*   **Unit tests and typecheck cannot catch load-time failures.** After any dependency upgrade that touches the runtime (Nest, Fastify, swagger, a mycota release), build the Lambda bundle and drive real requests through it with `NODE_ENV=production`: a route, an unauthenticated guarded route, and an invalid body. An ESM-first dependency using `import.meta.url` compiled and passed every test, then crashed the bundle at startup.
+*   After changing dependencies, prove it from scratch: delete every `node_modules`, `pnpm install --frozen-lockfile`, then typecheck, build and test. A green run on an existing `node_modules` can pass only because of a stale hoisted copy.
 
 ## 7. Tooling and Automation
 
@@ -222,6 +237,15 @@ Each file owns one concern. Put a setting in the most specific place that owns i
 *   Before opening a PR run: `pnpm turbo run typecheck lint build test`.
 *   `turbo.json` expresses task order (`dependsOn: ["^build"]`); do not hand-order builds in scripts.
 *   Use conventional-commit style PR titles (`fix:`, `feat:`).
+
+### Dependencies
+
+*   **Every dependency is pinned to an exact version** (`saveExact`), so `pnpm add` records `1.2.3`. When converting existing ranges, pin to the version that is **installed** (`pnpm ls -r --depth 0 --json`), never by stripping the `^`: that silently downgrades anything installed above its range's floor.
+*   Check for updates against the registry (`pnpm outdated -r`). Test major bumps rather than assuming.
+*   **Framework and validation packages come from one copy.** `@bubltec/mycota-*` declare Nest, `class-validator`, `class-transformer`, `passport`, `reflect-metadata` and `rxjs` as **peer dependencies**, so this app owns the single copy. Verify with `pnpm why @nestjs/common`: exactly one version. Two copies break DI, and make `class-validator` decorators register into a store the `ValidationPipe` never reads.
+*   **Upgrade order is mycota first.** Upgrade and release `../mycota`, then bump the `@bubltec/mycota-*` pins here to the released version and run `pnpm install` to regenerate the lockfile. A branch prepared before the release cannot have a valid lockfile, and pnpm's pre-run install check will fail every `pnpm exec` in it; set `pnpm_config_verify_deps_before_run=false` for that window (the pnpm 11 prefix is `pnpm_config_`; `npm_config_` is ignored).
+*   `@nestjs/platform-fastify` pins `fastify` exactly as a regular dependency. The workspace `overrides` entry keeps one Fastify copy; keep it equal to `apps/bff`'s `fastify` version, or the plugin types (`@fastify/cookie`) stop lining up.
+*   Node comes from `.nvmrc`. Change it there only; CI reads it with `node-version-file`.
 
 ### Build and bundling
 
@@ -235,7 +259,8 @@ Each file owns one concern. Put a setting in the most specific place that owns i
 *   Jobs that touch AWS declare `permissions: { id-token: write, contents: read }` and assume the OIDC deploy role. PR-triggered runs get no AWS credentials by design.
 *   The OIDC `sub` claim uses immutable IDs (`owner@id/repo@id`) and changes shape when a job sets `environment:`. Keep both patterns in the trust policy and confirm against a real token.
 *   Deploy workflows use a non-cancelling `concurrency` group so an in-flight deploy is never aborted.
-*   Pin third-party actions to a major version at minimum.
+*   Actions are currently pinned to a major tag (see Known deviations).
+*   The Node version is read from `.nvmrc` (`node-version-file`), never hard-coded in a workflow.
 
 ## 9. Performance
 
@@ -250,11 +275,28 @@ Each file owns one concern. Put a setting in the most specific place that owns i
 *   **esbuild-only builds break Nest DI** with no error at build time. Always compile with `tsc` first.
 *   **`fromLookup` breaks credential-free `cdk synth`.** Import by attributes instead.
 *   **Pinned physical names block replacement** of the resource.
-*   **Routing to `$LATEST` instead of the `live` alias** bypasses canary and rollback.
+*   **Routing to `$LATEST` instead of the `current` alias** bypasses canary and rollback.
+*   **Duplicate framework copies.** Two `@nestjs/common` or two `fastify` installs compile with confusing type errors or fail at runtime. Check `pnpm why`, and use a workspace `override` when a dependency pins an exact version.
+*   **A green build on an old `node_modules` proves little.** A missing `@types/node` declaration passed because a hoisted copy happened to exist. Prove dependency changes from a clean install.
+*   **ESM-first packages in the CJS bundle.** `import.meta.url` is an empty object after esbuild's CJS output, so a package that calls `createRequire(import.meta.url)` at load time crashes the Lambda at startup. Define `import.meta.url` in the build, and smoke-test the bundle.
+*   **`.npmrc` `save-exact` is ignored by pnpm 11.** Set `saveExact` in `pnpm-workspace.yaml`.
 *   **Passport under Fastify** needs `reply.setHeader`/`reply.end` bound to the raw response before OAuth redirects work.
 *   **DTO instances written to DynamoDB** need `convertClassInstanceToMap` on the document client.
 *   **A wrong OIDC `sub` pattern** fails `AssumeRole` only at deploy time. Check the real claim.
 *   **A first request after deploy is a cold start.** Timeouts and e2e waits must allow for it, but do not assume every post-deploy failure is a cold start.
 *   **Plaintext secrets in Lambda env vars** are visible in the console and in CloudFormation. Use SSM or Secrets Manager.
+
+## 11. Known Deviations
+
+Things this rule asks for that the repo does not do yet. Do not copy these as patterns, and do not assume they are settled.
+
+*   **Plaintext secrets in Lambda env vars.** `JWT_SECRET` and `BRAVE_SEARCH_API_KEY` are set from CI secrets into the function's environment (visible in the console and the template). Only the GitHub client secret uses SSM. Moving them to SSM `SecureString` fetched at cold start needs the parameters created first, so it must be sequenced with a deploy.
+*   **Actions are pinned to a major tag, not a commit SHA**, and `actions/cache` is on a different major than the rest. There is no Dependabot config to keep pins fresh.
+*   **`.oxlintrc.json` sets only ignore patterns**, so oxlint runs its default rules. No extra categories or type-aware rules.
+*   **Full-table `Scan` on a cache miss** reads every item in the content table, including contribution rows. Fine at ~1k rows; revisit with a GSI or a dedicated partition if it grows.
+*   **Dev and prod share one AWS account** and one deploy role (prod is gated only by the GitHub Environment approval).
+*   **DTO classes duplicate `shared-types`.** A schema-first approach (for example Zod, shared between web and BFF) would end drift between the two, at the cost of a migration. Not adopted.
+*   **Log retention, the source-map env var and the prod 5xx alarm are written but not committed** (they live in uncommitted changes to `api-stack.ts` and `email-stack.ts`, held while an unrelated uncommitted hunk in that file is resolved). Until they land, the "Logging and alerts" bullets about retention and the alarm describe intent.
+*   **NestJS 12 / Fastify 5 are prepared on branch `chore/nest-12-upgrade` but not released.** It waits on the mycota major release and needs its lockfile regenerated afterwards.
 
 By following these practices, you keep the BFF, shared packages, and infrastructure consistent, secure, cheap to run, and easy to change.
