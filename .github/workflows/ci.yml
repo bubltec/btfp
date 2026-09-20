@@ -5,7 +5,31 @@ on:
     branches: [main]
 
 jobs:
+  # A docs-only change (markdown, Cursor rules, agent files) cannot affect the build,
+  # so the heavy `check` job is skipped. This is done per job rather than with
+  # `paths-ignore` on the workflow on purpose: a skipped job reports success, while a
+  # workflow that never starts leaves a required `CI / check` status pending forever.
+  # Keep the pattern list in sync with `paths-ignore` in deploy.yml.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: filter
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+            | grep -qvE '\.(md|mdc)$|^docs/|^\.cursor/|^\.claude/|^\.github/CODEOWNERS$|^LICENSE$'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   check:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     # No AWS credentials anywhere in this job, deliberately — PR-triggered
     # runs can never get standing account access. See docs/ci-cd.md.
