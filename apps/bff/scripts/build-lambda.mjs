@@ -36,6 +36,9 @@ await build({
   ],
   sourcemap: true,
   minify: true,
+  // Minification mangles class names, which are what Nest prints as its log
+  // context ("[e]" instead of "[SearchService]"). Keep them; the size cost is small.
+  keepNames: true,
   logLevel: 'info',
 });
 

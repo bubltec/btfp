@@ -2,6 +2,7 @@ import { FastifyAdapter } from '@nestjs/platform-fastify';
 import awsLambdaFastify from '@fastify/aws-lambda';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { createApp } from './app.js';
+import { requestContext } from './logging/request-context.js';
 
 type Proxy = (event: unknown, context: unknown) => Promise<unknown>;
 let proxy: Proxy | undefined;
@@ -29,7 +30,8 @@ async function bootstrap(): Promise<Proxy> {
   return awsLambdaFastify(adapter.getInstance()) as Proxy;
 }
 
-export const handler = async (event: unknown, context: unknown) => {
-  proxy ??= await bootstrap();
-  return proxy(event, context);
-};
+export const handler = async (event: unknown, context: { awsRequestId?: string }) =>
+  requestContext.run({ requestId: context.awsRequestId ?? 'unknown' }, async () => {
+    proxy ??= await bootstrap();
+    return proxy(event, context);
+  });

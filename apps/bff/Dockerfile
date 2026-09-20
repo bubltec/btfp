@@ -7,6 +7,8 @@
 # until AWS GA (~Nov 2026); it's still Node 26.
 FROM public.ecr.aws/lambda/nodejs:26-preview
 
-COPY dist/lambda.js ${LAMBDA_TASK_ROOT}/
+# The .map is what lets NODE_OPTIONS=--enable-source-maps (set in api-stack.ts)
+# turn minified stack traces back into real file:line.
+COPY dist/lambda.js dist/lambda.js.map ${LAMBDA_TASK_ROOT}/
 
 CMD ["lambda.handler"]
