@@ -1,0 +1,20 @@
+---
+description: Sync with origin and check merged PRs before editing code
+alwaysApply: true
+---
+
+# Sync before code changes
+
+Before **any** file edit, commit, or new branch work:
+
+1. `git fetch origin`
+2. Compare the **current branch** to its upstream and to `origin/main`:
+   - `git status -sb`
+   - `git log HEAD..origin/main --oneline` (are you behind main?)
+   - `git log origin/main..HEAD --oneline` (unpushed / unmerged work?)
+3. If this branch has (or had) an open PR, check merge state **before** stacking more commits:
+   - `gh pr list --head $(git branch --show-current) --state all --json number,state,mergedAt`
+   - If `MERGED`: do **not** keep committing on this branch. Follow `CLAUDE.md` — stash if needed, fast-forward `main`, start a **new** branch for follow-up work.
+4. If `git rev-parse --verify MERGE_HEAD` or `.git/rebase-merge` exists, finish or abort that operation first; do not stash over an in-progress merge/rebase without asking the user.
+
+Only after the branch is aligned with intent (rebased on current `main` or confirmed still the right feature branch) should you edit files.

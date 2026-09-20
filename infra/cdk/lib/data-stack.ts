@@ -27,7 +27,9 @@ export class DataStack extends cdk.Stack {
       partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      pointInTimeRecovery: isProd,
+      pointInTimeRecoverySpecification: {
+        pointInTimeRecoveryEnabled: isProd,
+      },
       removalPolicy,
     });
 

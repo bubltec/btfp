@@ -8,6 +8,11 @@ sometimes gets committed, pushed, and merged to `main` outside the current
 session — a previous session, a teammate, a direct push — so local state
 can be stale in ways that aren't obvious from `git status` alone.
 
+Also check the **current branch** before editing: `git log HEAD..origin/main
+--oneline` and whether its PR is already merged (`gh pr list --head
+<branch> --state all`). If the PR merged, stop committing on that branch —
+rebase or branch fresh from `origin/main` for follow-ups (see step 2 below).
+
 If `origin/main` has commits not in local `main`:
 
 1. Check whether the **current branch's own work** already shipped —
