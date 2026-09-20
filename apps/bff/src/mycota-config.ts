@@ -1,5 +1,6 @@
 import type { MycotaAuthConfig } from '@bubltec/mycota-auth';
 import { USERS_TABLE_NAME } from './dynamo/dynamo.constants.js';
+import { requireInProduction } from './env.js';
 
 /**
  * The one place in apps/bff that still reads these process.env names —
@@ -11,8 +12,8 @@ import { USERS_TABLE_NAME } from './dynamo/dynamo.constants.js';
  */
 export function buildMycotaAuthConfig(): MycotaAuthConfig {
   return {
-    jwtSecret: process.env.JWT_SECRET ?? 'change-me-in-local-env',
-    webOrigin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+    jwtSecret: requireInProduction('JWT_SECRET', process.env.JWT_SECRET, 'change-me-in-local-env'),
+    webOrigin: requireInProduction('WEB_ORIGIN', process.env.WEB_ORIGIN, 'http://localhost:5173'),
     usersTableName: USERS_TABLE_NAME,
     emailFromAddress: process.env.SES_FROM_ADDRESS ?? 'noreply@badthingsforpets.com',
     sessionCookieName: process.env.SESSION_COOKIE_NAME ?? 'btfp_session',
