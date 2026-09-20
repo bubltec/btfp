@@ -130,7 +130,9 @@ async function main(): Promise<void> {
 
   await writeFile(OUTPUT_PATH, JSON.stringify(staging, null, 2) + '\n', 'utf-8');
   console.log(`Wrote ${staging.length} entries to ${OUTPUT_PATH}`);
-  console.log('Review and correct category/thingTypeId/severity before promoting to vetmeds-toxins.json.');
+  console.log(
+    'Review and correct category/thingTypeId/severity before promoting to vetmeds-toxins.json.',
+  );
 }
 
 main().catch((err) => {

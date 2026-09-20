@@ -10,11 +10,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.716.0",
-    "@aws-sdk/client-dynamodb": "^3.716.0",
-    "@aws-sdk/client-ses": "^3.716.0",
-    "@aws-sdk/client-ssm": "^3.716.0",
-    "@aws-sdk/lib-dynamodb": "^3.716.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1136.0",
+    "@aws-sdk/client-dynamodb": "^3.1136.0",
+    "@aws-sdk/client-ses": "^3.1136.0",
+    "@aws-sdk/client-ssm": "^3.1136.0",
+    "@aws-sdk/lib-dynamodb": "^3.1136.0",
     "@btfp/shared-types": "workspace:*",
     "@bubltec/mycota-auth": "0.6.0",
     "@bubltec/mycota-dynamo": "0.6.0",
@@ -31,21 +31,21 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "fastify": "^4.28.1",
-    "fuse.js": "^7.0.0",
+    "fuse.js": "^7.5.0",
     "passport": "^0.7.0",
     "passport-github2": "^0.1.12",
     "passport-google-oauth20": "^2.0.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.2"
   },
   "devDependencies": {
-    "aws-sdk-client-mock": "^4.1.0",
-    "@types/node": "^26.6.1",
+    "@types/node": "^26.6.2",
     "@types/passport-github2": "^1.2.9",
-    "@types/passport-google-oauth20": "^2.0.16",
-    "esbuild": "^0.24.2",
+    "@types/passport-google-oauth20": "^2.0.17",
+    "aws-sdk-client-mock": "^4.1.0",
+    "esbuild": "^0.28.2",
     "tsc-watch": "^7.2.1",
-    "typescript": "^5.8.0",
-    "vitest": "^2.1.0"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
   }
 }

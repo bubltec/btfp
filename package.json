@@ -23,10 +23,10 @@
     "mycota:pull": "bash scripts/mycota-pull.sh"
   },
   "devDependencies": {
-    "lefthook": "^1.13.6",
-    "oxfmt": "^0.59.0",
-    "oxlint": "^1.74.0",
-    "turbo": "^2.3.0",
-    "typescript": "^5.8.0"
+    "lefthook": "^2.1.14",
+    "oxfmt": "^0.68.0",
+    "oxlint": "^1.83.0",
+    "turbo": "^2.11.2",
+    "typescript": "^7.0.2"
   }
 }

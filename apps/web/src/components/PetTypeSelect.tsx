@@ -1,4 +1,4 @@
-import { Select } from '@base-ui-components/react/select';
+import { Select } from '@base-ui/react/select';
 import type { PetType } from '@btfp/shared-types';
 
 export function PetTypeSelect({
