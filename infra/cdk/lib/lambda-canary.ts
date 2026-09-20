@@ -5,14 +5,21 @@ import {
   AwsCustomResourcePolicy,
   PhysicalResourceId,
 } from 'aws-cdk-lib/custom-resources';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as sam from 'aws-cdk-lib/aws-sam';
 
 const CANARY_PERIOD = cdk.Duration.minutes(1);
 
-/** CDK `addAlias('live')` → SAM `AutoPublishAlias` leaves the old alias in Lambda until CFN deletes it, often after SAM tries to create the same name. */
-function deleteOrphanLiveAliasBeforeSam(fn: lambda.Function, cfn: lambda.CfnFunction): void {
-  const migration = new AwsCustomResource(fn, 'SamLiveAliasMigration', {
+/**
+ * CDK `addAlias('live')` → SAM `AutoPublishAlias`: the old alias can linger in
+ * Lambda while SAM tries to create the same name. One-time DeleteAlias on
+ * create; scoped to the stack (not the function construct) so API Gateway
+ * integrations do not form a CFN dependency cycle with the function.
+ */
+function deleteOrphanLiveAliasBeforeSam(fn: lambda.Function): void {
+  const stack = cdk.Stack.of(fn);
+  new AwsCustomResource(stack, `${fn.node.id}SamLiveAliasMigration`, {
     onCreate: {
       service: '@aws-sdk/client-lambda',
       action: 'DeleteAliasCommand',
@@ -21,7 +28,7 @@ function deleteOrphanLiveAliasBeforeSam(fn: lambda.Function, cfn: lambda.CfnFunc
         Name: 'live',
       },
       physicalResourceId: PhysicalResourceId.of(
-        `${cdk.Stack.of(fn).stackName}-${fn.node.id}-sam-live-alias-migration`,
+        `${stack.stackName}-${fn.node.id}-sam-live-alias-migration`,
       ),
       ignoreErrorCodesMatching: 'ResourceNotFoundException|NotFound',
     },
@@ -30,15 +37,22 @@ function deleteOrphanLiveAliasBeforeSam(fn: lambda.Function, cfn: lambda.CfnFunc
       action: 'GetFunctionCommand',
       parameters: { FunctionName: fn.functionName },
       physicalResourceId: PhysicalResourceId.of(
-        `${cdk.Stack.of(fn).stackName}-${fn.node.id}-sam-live-alias-migration`,
+        `${stack.stackName}-${fn.node.id}-sam-live-alias-migration`,
       ),
     },
-    policy: AwsCustomResourcePolicy.fromSdkCalls({
-      resources: [fn.functionArn, `${fn.functionArn}:*`],
-    }),
+    policy: AwsCustomResourcePolicy.fromStatements([
+      new iam.PolicyStatement({
+        actions: ['lambda:DeleteAlias', 'lambda:GetFunction'],
+        resources: [
+          stack.formatArn({
+            service: 'lambda',
+            resource: 'function',
+            resourceName: '*',
+          }),
+        ],
+      }),
+    ]),
   });
-
-  cfn.node.addDependency(migration);
 }
 
 /**
@@ -65,8 +79,9 @@ export function publishLiveAlias(
 
   fn.stack.addTransform('AWS::Serverless-2016-10-31');
 
+  deleteOrphanLiveAliasBeforeSam(fn);
+
   const cfn = fn.node.defaultChild as lambda.CfnFunction;
-  deleteOrphanLiveAliasBeforeSam(fn, cfn);
   cfn.addOverride('Type', 'AWS::Serverless::Function');
 
   const imageUri = (cfn.code as lambda.CfnFunction.CodeProperty | undefined)?.imageUri;

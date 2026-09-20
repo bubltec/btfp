@@ -117,7 +117,10 @@ export class ScraperStack extends cdk.Stack {
       subnetConfiguration: [{ name: 'public', subnetType: ec2.SubnetType.PUBLIC, cidrMask: 24 }],
     });
 
-    const cluster = new ecs.Cluster(this, 'Cluster', { vpc, containerInsights: false });
+    const cluster = new ecs.Cluster(this, 'Cluster', {
+      vpc,
+      containerInsightsV2: ecs.ContainerInsights.DISABLED,
+    });
 
     const taskDef = new ecs.FargateTaskDefinition(this, 'TaskDef', {
       cpu: 256,
