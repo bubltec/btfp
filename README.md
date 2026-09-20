@@ -17,14 +17,19 @@ Not a substitute for veterinary care. For a suspected poisoning, contact a veter
 |---|---|
 | `apps/web` | Vite + React + Base UI + Tailwind v4 frontend |
 | `apps/bff` | NestJS backend-for-frontend, deployed as a Lambda |
+| `apps/scraper` | Scheduled job that finds candidate entries and files them as unverified contributions |
+| `apps/e2e` | Playwright tests, run against a deployed stage |
 | `packages/shared-types` | DTOs shared between `web` and `bff` |
-| `packages/config` | Shared ESLint/TypeScript config |
+| `packages/config` | Shared TypeScript config presets (`tsconfig-node.json`, `tsconfig-react.json`) |
 | `infra/cdk` | AWS CDK app (Route53, CloudFront, WAF, API Gateway, Lambda, DynamoDB) |
 | `data/seed` | Seed data transform/loader (ASPCA-derived dataset → DynamoDB) |
 | `docs` | Architecture, infra, data model, verification flow, data sourcing |
-| `.claude/skills` | Skills that guide extending this app/infra consistently |
+| `.cursor/rules` | Source of truth for agent instructions (`AGENTS.md` indexes them) |
+| `.claude/skills` | Pointers (for Claude Code) to the `adding-*` playbooks in `.cursor/rules` |
 
 ## Getting started
+
+Requires Node 26 (see `.nvmrc`) and Docker. See [docs/contributing.md](docs/contributing.md).
 
 ```bash
 pnpm install

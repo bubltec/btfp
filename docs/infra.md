@@ -64,6 +64,14 @@ transform. The behavior is covered by `infra/cdk/lib/lambda-canary.spec.ts`.
   `NODE_OPTIONS=--enable-source-maps` turns minified frames back into `src/*.ts:line`.
 - **Retention:** the BFF and the SES forwarder use explicit log groups, 14 days on dev and 30
   on prod (prod logs are retained if the stack is deleted). Lambda's auto-created group never expires.
+- **Finding the logs:** the log group has a CDK-generated name, not `/aws/lambda/<function>`.
+  Ask the function for it:
+  `aws lambda get-function-configuration --function-name <fn> --query LoggingConfig.LogGroup --output text`.
+  In CloudWatch Logs Insights the JSON fields are discovered automatically, so
+  `filter requestId = "<awsRequestId>" | sort @timestamp` follows one request from cold start to
+  response. The function's original auto-created `/aws/lambda/<function>` group is left behind
+  when logging moves to the explicit group. It has no retention set, so delete it by hand once you
+  no longer need the old logs.
 - **Alerts:** prod has an alarm on 3+ API 5xx responses in 5 minutes that publishes to an SNS
   topic emailing `FORWARD_TO_ADDRESS`. SNS emails a confirmation link the first time; alerts are
   not delivered until it's clicked.
@@ -117,6 +125,21 @@ Real secret values live in AWS SSM Parameter Store (SecureString), under
 `/btfp/github-client-secret`, prod-only, referenced but not managed by CDK
 — see `GITHUB_CLIENT_SECRET_PARAM_NAME` in `infra/cdk/lib/config.ts`).
 That's the source of truth, not any local file.
+
+How a secret reaches the deployed Lambda differs, and it matters for the production startup
+check:
+
+- `GITHUB_CLIENT_SECRET` is read from SSM at cold start (`apps/bff/src/lambda.ts`).
+- `JWT_SECRET` and `BRAVE_SEARCH_API_KEY` are plain Lambda environment variables set at deploy
+  time from the GitHub Actions secrets `BTFP_DEV_JWT_SECRET` / `BTFP_PROD_JWT_SECRET` /
+  `BTFP_BRAVE_SEARCH_API_KEY` (see [ci-cd.md](./ci-cd.md#manual-one-time-setup)). Moving them
+  to SSM is an open follow-up (Known Deviations in
+  `.cursor/rules/bff-typescript-cdk-best-practices.mdc`).
+- In production the BFF **refuses to start** if `JWT_SECRET` or `WEB_ORIGIN` is missing or still
+  a placeholder (`REPLACE_*`, `change-me*`), and CORS no longer falls back to reflecting any
+  origin. If a deploy goes out with an unset `BTFP_*_JWT_SECRET` GitHub secret, the placeholder
+  default from `config.ts` is deployed and every request fails at startup, loudly, instead of
+  the app running with a publicly known signing secret. Set the secret and redeploy.
 
 - `pnpm secrets:sync dev` / `pnpm secrets:sync prod` — pulls current values
   down into `infra/cdk/.env.deploy.local` (and, for `dev`, also updates

@@ -16,7 +16,8 @@ is the fallback for hotfixes or debugging a broken pipeline).
 2. **Merge.** `main` requires the `CI / check` status to pass first (branch protection, set up
    once — see [Manual one-time setup](#manual-one-time-setup)). Merging triggers
    `.github/workflows/deploy.yml`.
-3. **`build`** — installs, builds every package (`turbo run typecheck build`), uploads
+3. **`build`** — installs (every job reads its Node version from `.nvmrc` via
+   `node-version-file`), builds every package (`turbo run typecheck build`), uploads
    `apps/bff/dist` and `apps/web/dist` as GitHub Actions artifacts. Every later job downloads
    these instead of rebuilding — this is what makes "the same thing promoted to prod" literally
    true, not just "the same source re-built twice."
@@ -203,11 +204,14 @@ Not automatable from CDK — these are GitHub repo settings.
   email sign-up against dev's actual DynamoDB tables on every run. Accepted rather than built
   around — dev isn't a pristine/indexed environment anyway. Wipe/reseed it periodically by hand
   if it gets noisy (`docs/infra.md` has the seed command).
-- **Prod Lambda canary rollback watches AWS/Lambda Errors, not Nest HTTP 5xx.** The canary
-  itself is started by `DeploymentPreference: Canary10Percent5Minutes`. The `live` alias
-  Errors alarm is only a rollback trigger. A handler that returns a 500 JSON body is still a
-  successful invocation, so that alarm will not fire. Dev uses `AllAtOnce` and has no rollback
-  alarm. Static web assets (S3 + CloudFront) are still an in-place overwrite.
+- **Prod Lambda canary rollback watches AWS/Lambda Errors, not Nest HTTP 5xx.** CodeDeploy
+  shifts 10% of traffic for 5 minutes (`LambdaDeploymentConfig.CANARY_10PERCENT_5MINUTES`) and
+  rolls back if `Errors >= 1` on the `current` alias or on the new version (see
+  [infra.md](./infra.md#lambda-alias-and-canary)). A handler that returns a 500 JSON body is
+  still a successful invocation, so those alarms will not fire for it. A separate prod alarm on
+  API 5xx responses (3+ in 5 minutes) emails via SNS, but it only notifies; it does not roll
+  back. Dev has no canary: the alias flips immediately and there is no rollback alarm. Static
+  web assets (S3 + CloudFront) are still an in-place overwrite.
 - **A `prod-diff`/`deploy-prod` failure between the two `BtfpProd` deploys leaves prod running
   new API/DB code with stale web assets** until the job is re-run or the prerender+web-deploy
   steps are run manually (same commands `docs/infra.md` documents). This is visible (a red job

@@ -1,5 +1,12 @@
 # Contributing (code)
 
+Prerequisites:
+
+- **Node 26**, from `.nvmrc` (`nvm use`). `engines` is `>=26` with `engineStrict`, so
+  `pnpm install` fails on any other Node version instead of only warning.
+- **pnpm** at the version pinned in `packageManager` (pnpm switches to it automatically).
+- **Docker**, for DynamoDB Local.
+
 ```bash
 git clone git@github.com:bubltec/btfp.git
 pnpm install
@@ -55,20 +62,25 @@ packages, its own git history and CI. It's published to the public npm registry 
 `@bubltec/mycota-*`, and btfp consumes it as an ordinary dependency — no submodule, no workspace
 linking.
 
-Every relevant push to mycota's `main` publishes one of two ways:
+Every relevant push to mycota's `main` publishes **all** of its packages, in lockstep. The bump
+is chosen from the squash-merge commit message, first match wins: `#major`, `#minor`, `#patch`
+or `#next` as a standalone word, then a conventional prefix (`feat!:` is major, `feat:` minor,
+`fix:` patch), otherwise patch.
 
-- **No `#major`/`#minor`/`#patch` marker in the merge commit** (the normal case) — publishes a
-  rolling prerelease under the `next` dist-tag (e.g. `1.2.1-next.42`).
-- **Marker present** (put it in the PR title — that's what becomes the squash-merge commit
-  subject) — cuts a real semver release, publishes under `latest`, and tags/releases it in git.
+- **`#next`** publishes a rolling prerelease under the `next` dist-tag (no git tag).
+- **Anything else** is a real release on `latest`, with a `vX.Y.Z` git tag and a GitHub Release.
+
+Put the marker in the PR title (it becomes the squash subject). The **whole** message is
+scanned, so don't write those tokens in commit or PR bodies unless you mean them. Details live in
+mycota's `.cursor/rules/release-on-merge.mdc`.
 
 ### Typical loop
 
 1. **Edit framework code** in a separate clone of [bubltec/mycota](https://github.com/bubltec/mycota)
    (`git clone git@github.com:bubltec/mycota.git` somewhere outside this repo).
 2. **Open a PR, merge to `main`** — its CI runs `pnpm turbo run typecheck build test`, then
-   publishes automatically per the rule above. Include a `#major`/`#minor`/`#patch` marker in the
-   PR title if this should be a real release rather than just moving `next` forward.
+   publishes automatically per the rule above. Merging is releasing to a public registry, so
+   choose the bump deliberately (a breaking change is `#major` or `feat!:` in the PR title).
 3. **Pull the new version into btfp**:
 
    ```bash
@@ -77,7 +89,7 @@ Every relevant push to mycota's `main` publishes one of two ways:
 
    This bumps `@bubltec/mycota-auth`/`-dynamo`/`-professional-verification` in `apps/bff` and
    `@bubltec/mycota-cdk` in `infra/cdk` to whatever `latest` (the most recent real release)
-   currently resolves to.
+   currently resolves to, pinned to that exact version, never a range.
    This is a **deliberate, one-time pull** — package versions are pinned at install time,
    not auto-updating, so re-run this whenever you want the newest release. To track the
    rolling prerelease instead, run `pnpm add @bubltec/mycota-x@next` for the specific
@@ -86,9 +98,25 @@ Every relevant push to mycota's `main` publishes one of two ways:
 5. **Commit the result** like any other dependency bump — it's just a `package.json`/
    `pnpm-lock.yaml` diff, no special submodule-pointer ceremony.
 
-For a fast local edit-and-test loop against a mycota change without waiting for a publish:
-`pnpm link --global` from your mycota clone, then `pnpm link --global @bubltec/mycota-auth` (etc.)
-in this repo.
+To test an unpublished mycota change, **do not use `pnpm link`.** mycota declares NestJS and
+`class-validator` as **peer dependencies**, and a linked package resolves them from its own
+`node_modules`, so the app ends up with two copies of Nest: broken DI, and `class-validator`
+decorators that the app's `ValidationPipe` never sees. Pack mycota the way its CI does and
+install the tarballs instead:
+
+1. In the mycota clone: `pnpm -r exec -- npm pkg set version=<x.y.z>`, `pnpm turbo run build`,
+   `pnpm -r pack --pack-destination <dir>`, then `git checkout -- packages/*/package.json`.
+2. Here, add a temporary `overrides` block to `pnpm-workspace.yaml` pointing each
+   `@bubltec/mycota-*` at its tarball (`"@bubltec/mycota-auth": "file:<dir>/bubltec-mycota-auth-<x.y.z>.tgz"`, and so on).
+3. Set `pnpm_config_verify_deps_before_run=false` so pnpm's pre-run install check does not reject
+   the tarballs' build scripts (pnpm 11 uses the `pnpm_config_` prefix; `npm_config_` is ignored).
+4. Confirm with `pnpm why @nestjs/common` that exactly one version is installed.
+
+Never commit those overrides, or a lockfile that references `file:` paths.
+
+**Framework upgrades go mycota first.** Its peer ranges must accept the version the app runs, so
+to move NestJS, Fastify or `class-validator`, upgrade and release mycota, then bump the pins here
+and run `pnpm install` to regenerate the lockfile.
 
 ### What not to do
 
@@ -98,8 +126,11 @@ in this repo.
 ## Before opening a PR
 
 ```bash
-pnpm turbo run typecheck build test   # same as CI (includes BFF contribution tests)
+pnpm turbo run typecheck build test --filter='!@btfp/e2e'   # same as CI (includes BFF contribution tests)
 ```
+
+`e2e` is excluded, as in CI, because it drives a browser against a deployed environment. Run
+it on its own when you need it (see [e2e-testing.md](e2e-testing.md)).
 
 Lint and format should already be correct from the Lefthook pre-commit hook. For a full-tree
 pass manually: `pnpm run lint` and/or `pnpm run format`.
@@ -119,5 +150,14 @@ a Playwright test from a plain-English description rather than writing one by ha
 - Shared types (`Thing`, `PetType`, etc.) live in `packages/shared-types` — add there first
   if a change touches both `apps/bff` and `apps/web`.
 - No inline comments beyond a line or two, and only where the *why* isn't obvious from the
-  code. See `.claude/skills/` for guided patterns when adding a new thing type, API
-  endpoint, or infra resource.
+  code. See the `adding-*` rules in `.cursor/rules/` for guided patterns when adding a new
+  thing type, API endpoint, or infra resource.
+- **Exact versions.** Every dependency is pinned. `saveExact` is set in `pnpm-workspace.yaml`
+  (and mirrored in `.npmrc`; pnpm 11 ignores `.npmrc` for this), so `pnpm add x` writes `1.2.3`.
+  Never hand-write `^` ranges. When converting ranges, pin to the *installed* version
+  (`pnpm ls -r --depth 0 --json`), not by stripping the caret, which can silently downgrade.
+- **Request bodies are strict.** Unknown fields are a 400 (`forbidNonWhitelisted`), so a new
+  field must be added to the DTO in the same change that sends it.
+- **Node is set in one place,** `.nvmrc`, which CI reads via `node-version-file`.
+- **Agent instructions** live in `.cursor/rules/` (indexed by `AGENTS.md`); `CLAUDE.md` only
+  points there. Add or change rules there.

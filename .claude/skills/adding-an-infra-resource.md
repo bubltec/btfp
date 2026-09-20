@@ -3,22 +3,6 @@ name: adding-an-infra-resource
 description: Add a new AWS resource to the badthingsforpets CDK app
 ---
 
-1. Decide which stack it belongs in (`infra/cdk/lib/`): `data-stack.ts` for storage,
-   `api-stack.ts` for compute/routing behind `/api/*`, `web-stack.ts` for anything in front
-   of the static site or DNS. A genuinely new concern (e.g. a queue, a scheduled job) is a
-   new stack file, wired into `app-stage.ts` alongside the existing three.
-2. Keep it region-agnostic and credential-free at synth time: no `HostedZone.fromLookup`
-   (does an AWS API call), prefer `fromHostedZoneAttributes` with values from
-   `lib/config.ts` — see the comment there on why `HOSTED_ZONE_ID` is a placeholder until
-   `BtfpDns` is actually deployed.
-3. Both `BtfpDev` and `BtfpProd` are the same `AppStage` composition
-   (`app-stage.ts`) parameterized by `EnvConfig` — don't special-case env names inside a
-   stack unless the difference is genuinely environment-specific (e.g. `RemovalPolicy`,
-   which already branches on `envConfig.envName === 'prod'`).
-4. Mind the budget: check [docs/infra.md](../../docs/infra.md)'s cost table before adding
-   anything with a fixed monthly cost (ALB, NAT Gateway, OpenSearch, always-on compute) —
-   the $50/mo target assumes everything here scales to zero.
-5. Verify with `npx cdk synth "**"` from `infra/cdk` — it must succeed without AWS
-   credentials. If it doesn't, you've probably introduced a context lookup (`fromLookup`,
-   SSM `valueFromLookup`) that needs to become a plain prop or a placeholder in
-   `config.ts` instead.
+This is a pointer. The instructions live in
+[`.cursor/rules/adding-an-infra-resource.mdc`](../../.cursor/rules/adding-an-infra-resource.mdc),
+the single source of truth. Read that file and follow it. Do not add steps here.

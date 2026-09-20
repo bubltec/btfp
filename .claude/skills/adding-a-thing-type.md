@@ -3,19 +3,6 @@ name: adding-a-thing-type
 description: Add a new thing type (beyond plant/food/medication) to badthingsforpets
 ---
 
-Thing types are data, not code — there's no schema migration for adding one.
-
-1. `POST /api/thing-types` with `{ name, description, details? }` (or write directly via
-   `ThingTypesService.create` from a script/seed).
-2. If it needs quiz/search treatment beyond the defaults, check
-   `apps/bff/src/verification/quiz-bank.ts` — the quiz only draws distractors from
-   `SAFE_PLANT_NAMES`, so a very different type (e.g. "activity") may need its own
-   distractor pool for the quiz to make sense.
-3. Update `THING_TYPES` in `data/seed/src/transform.ts` if this type should be part of the
-   seed pipeline, and add a transform loop mirroring the existing plant/food/medication
-   ones.
-4. Add the id to `THING_TYPES` array in `apps/web/src/pages/SubmitPage.tsx` so contributors
-   can pick it in the submission form.
-
-No frontend routing changes needed — `ThingCard`, `ThingDetailPage`, and the browse/search
-filters are all type-agnostic and read `thingTypeId` generically.
+This is a pointer. The instructions live in
+[`.cursor/rules/adding-a-thing-type.mdc`](../../.cursor/rules/adding-a-thing-type.mdc), the
+single source of truth. Read that file and follow it. Do not add steps here.

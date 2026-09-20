@@ -10,3 +10,7 @@ The always-apply rules are imported here so Claude Code loads them every session
 
 Read `.cursor/rules/bff-typescript-cdk-best-practices.mdc` before changing the BFF,
 shared packages, infrastructure, tests or CI.
+
+Before adding an endpoint, an infra resource or a thing type, read the matching playbook:
+`.cursor/rules/adding-an-api-endpoint.mdc`, `adding-an-infra-resource.mdc` or
+`adding-a-thing-type.mdc`.
