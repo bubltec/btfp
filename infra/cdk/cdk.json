@@ -2,6 +2,6 @@
   "app": "npx tsx bin/app.ts",
   "requireApproval": "broadening",
   "context": {
-    "@aws-cdk/core:crossStackReferencesDefaultStrong": true
+    "@aws-cdk/core:defaultCrossStackReferences": "strong"
   }
 }
