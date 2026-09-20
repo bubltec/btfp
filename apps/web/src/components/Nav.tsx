@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { isNonProdHost } from '../lib/env.js';
 import { useCurrentUser } from '../lib/useCurrentUser.js';
 import { EmailSignInDialog } from './EmailSignInDialog.js';
 
@@ -21,7 +22,7 @@ export function Nav() {
               <span className="hidden sm:inline">Add a thing</span>
               <span className="sm:hidden">Add</span>
             </Link>
-            {user?.verifiedContributor && (
+            {user && (user.verifiedContributor || isNonProdHost()) && (
               <Link to="/moderation" className="inline-block py-1.5 hover:underline">
                 Moderation
               </Link>
