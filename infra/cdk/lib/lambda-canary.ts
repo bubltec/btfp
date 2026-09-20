@@ -89,5 +89,11 @@ export function publishLiveAlias(
   return lambda.Function.fromFunctionAttributes(fn, 'LiveAlias', {
     functionArn: `${fn.functionArn}:live`,
     role: fn.role,
+    // Without this, CDK treats the imported alias as possibly
+    // cross-account/region (fn.functionArn is a token) and silently no-ops
+    // addPermission() — grantInvoke() from HttpLambdaIntegration then adds
+    // no resource policy at all, so API Gateway gets 500s invoking it.
+    // It's always the same stack's own function, just via an alias ARN.
+    sameEnvironment: true,
   });
 }
