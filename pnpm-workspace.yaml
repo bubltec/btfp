@@ -31,3 +31,9 @@ supportedArchitectures:
 minimumReleaseAgeExclude:
   - '@bubltec/*'
   - '@types/node@26.6.1'
+# @nestjs/platform-fastify pins `fastify` to an exact version as a regular
+# dependency, so the app's own `fastify` would otherwise install a second copy
+# and the Fastify plugin types (@fastify/cookie) stop lining up. Keep this equal
+# to the `fastify` version in apps/bff/package.json.
+overrides:
+  fastify: 5.12.5
