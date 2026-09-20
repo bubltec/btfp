@@ -297,6 +297,5 @@ Things this rule asks for that the repo does not do yet. Do not copy these as pa
 *   **Dev and prod share one AWS account** and one deploy role (prod is gated only by the GitHub Environment approval).
 *   **DTO classes duplicate `shared-types`.** A schema-first approach (for example Zod, shared between web and BFF) would end drift between the two, at the cost of a migration. Not adopted.
 *   **Log retention, the source-map env var and the prod 5xx alarm are written but not committed** (they live in uncommitted changes to `api-stack.ts` and `email-stack.ts`, held while an unrelated uncommitted hunk in that file is resolved). Until they land, the "Logging and alerts" bullets about retention and the alarm describe intent.
-*   **NestJS 12 / Fastify 5 are prepared on branch `chore/nest-12-upgrade` but not released.** It waits on the mycota major release and needs its lockfile regenerated afterwards.
 
 By following these practices, you keep the BFF, shared packages, and infrastructure consistent, secure, cheap to run, and easy to change.
