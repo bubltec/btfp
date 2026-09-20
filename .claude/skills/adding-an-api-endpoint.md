@@ -17,6 +17,12 @@ description: Add a new endpoint to the badthingsforpets NestJS BFF
    controller.
 5. Register the new route's shape in `packages/shared-types` if the response is a DTO the
    frontend needs typed.
+   If the route takes a body, declare **every** accepted field on the DTO with a validator
+   decorator. Unknown fields are a 400 (`forbidNonWhitelisted`), so the client and the DTO must
+   change together. A required nested object needs `@IsDefined()` + `@ValidateNested()` +
+   `@Type(() => Dto)`, or a body missing it passes validation and 500s later. Add a spec that
+   runs the DTO through `VALIDATION_PIPE_OPTIONS` (`apps/bff/src/validation.ts`), as
+   `create-contribution.dto.spec.ts` does, so the test uses the real pipe config.
 6. New module needs registering in `apps/bff/src/app.module.ts`.
 
 No separate step for Lambda — `apps/bff/src/lambda.ts` and `main.ts` both boot the same
