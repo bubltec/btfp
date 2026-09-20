@@ -150,8 +150,8 @@ a Playwright test from a plain-English description rather than writing one by ha
 - Shared types (`Thing`, `PetType`, etc.) live in `packages/shared-types` — add there first
   if a change touches both `apps/bff` and `apps/web`.
 - No inline comments beyond a line or two, and only where the *why* isn't obvious from the
-  code. See `.claude/skills/` for guided patterns when adding a new thing type, API
-  endpoint, or infra resource.
+  code. See the `adding-*` rules in `.cursor/rules/` for guided patterns when adding a new
+  thing type, API endpoint, or infra resource.
 - **Exact versions.** Every dependency is pinned. `saveExact` is set in `pnpm-workspace.yaml`
   (and mirrored in `.npmrc`; pnpm 11 ignores `.npmrc` for this), so `pnpm add x` writes `1.2.3`.
   Never hand-write `^` ranges. When converting ranges, pin to the *installed* version

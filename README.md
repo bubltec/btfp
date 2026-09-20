@@ -25,7 +25,7 @@ Not a substitute for veterinary care. For a suspected poisoning, contact a veter
 | `data/seed` | Seed data transform/loader (ASPCA-derived dataset → DynamoDB) |
 | `docs` | Architecture, infra, data model, verification flow, data sourcing |
 | `.cursor/rules` | Source of truth for agent instructions (`AGENTS.md` indexes them) |
-| `.claude/skills` | Skills that guide extending this app/infra consistently |
+| `.claude/skills` | Pointers (for Claude Code) to the `adding-*` playbooks in `.cursor/rules` |
 
 ## Getting started
 

@@ -28,16 +28,17 @@ Top-level folders are split by deployable role, not by technical layer.
 *   **`scripts/`**: Repo-level helper scripts.
 *   **`assets/`**: Static assets not owned by an app.
 *   **`.github/`**: `workflows/` (CI and deploy) and `CODEOWNERS`.
-*   **`.claude/skills/`** and **`.cursor/rules/`**: Agent instructions. Keep them short and task-specific.
+*   **`.cursor/rules/`**: The source of truth for agent instructions, including the `adding-*` task playbooks. Keep rules short and task-specific. `AGENTS.md`, `CLAUDE.md` and `.claude/skills/*` are pointers only; `.claude/launch.json` is preview-tool configuration.
 
 Example:
 
 ```plain text
 root-project/
 ├── .claude/
-│   └── skills/
+│   ├── launch.json           # preview-tool config, not instructions
+│   └── skills/               # one-file pointers to .cursor/rules/adding-*.mdc
 ├── .cursor/
-│   └── rules/
+│   └── rules/                # source of truth
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci.yml
