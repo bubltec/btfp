@@ -10,6 +10,8 @@ allowBuilds:
   '@scarf/scarf': false
   esbuild: true
   lefthook: true
+# Pin exact versions when adding dependencies. Kept in sync with .npmrc.
+saveExact: true
 # Install native optional deps for both Mac arches so a Rosetta Node
 # (leftover Homebrew at /usr/local) and nvm's arm64 Node can share
 # the same node_modules. See pnpm.io/settings#supportedarchitectures.
