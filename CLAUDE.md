@@ -12,6 +12,9 @@ Also check the **current branch** before editing: `git log HEAD..origin/main
 --oneline` and whether its PR is already merged (`gh pr list --head
 <branch> --state all`). If the PR merged, stop committing on that branch —
 rebase or branch fresh from `origin/main` for follow-ups (see step 2 below).
+If the PR is **not** merged and the branch already has commits not in
+`origin/main`, keep working on that branch (rebase if behind); do not start
+a second branch for the same work.
 
 If `origin/main` has commits not in local `main`:
 

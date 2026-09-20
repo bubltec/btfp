@@ -1,9 +1,18 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ContributionsService } from './contributions.service.js';
-import { VerifiedGuard, CurrentUser, type AuthenticatedUser } from '@bubltec/mycota-auth';
+import {
+  JwtAuthGuard,
+  VerifiedGuard,
+  CurrentUser,
+  type AuthenticatedUser,
+} from '@bubltec/mycota-auth';
 // Value import — `import type` erases the class before emitDecoratorMetadata runs,
 // so ValidationPipe sees paramtypes [Function, Object] and never transforms `payload`.
 import { CreateContributionDto } from './dto/create-contribution.dto.js';
+
+// Prod still requires verifiedContributor. Dev/local only needs a session —
+// otherwise a first login (email, no quiz) hits 403 and the queue looks empty.
+const ModerationGuard = process.env.STAGE === 'prod' ? VerifiedGuard : JwtAuthGuard;
 
 @Controller('contributions')
 export class ContributionsController {
@@ -16,15 +25,15 @@ export class ContributionsController {
   }
 
   @Get('pending')
-  @UseGuards(VerifiedGuard)
+  @UseGuards(ModerationGuard)
   async listPending() {
-    // MVP: any verified contributor can see the moderation queue. Restrict to
+    // Prod: verified contributors. Non-prod: any signed-in user. Restrict to
     // an admin allowlist before opening this up publicly.
     return this.contributions.listPending();
   }
 
   @Post(':thingId/:sk/approve')
-  @UseGuards(VerifiedGuard)
+  @UseGuards(ModerationGuard)
   async approve(
     @Param('thingId') thingId: string,
     @Param('sk') sk: string,

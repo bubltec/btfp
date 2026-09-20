@@ -79,7 +79,10 @@ matter here since the test-code endpoint reads the code straight from the
 database, never the inbox.)
 
 Verification: a brand-new signed-in user has verifiedContributor: false and
-cannot submit things or see the moderation queue. Two real paths exist (a
+cannot submit things. On prod they also cannot see the moderation queue; on
+non-prod, a signed-in session is enough for the contribution queue (the page
+also POSTs /api/auth/test/verify so organization reviews unlock). Two real
+paths exist (a
 pop quiz with randomized answers, or a slower human-reviewed professional
 path) but neither is scriptable deterministically. Instead, call POST
 /api/auth/test/verify (authenticated, i.e. after completing email sign-in

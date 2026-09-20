@@ -15,6 +15,7 @@ Before **any** file edit, commit, or new branch work:
 3. If this branch has (or had) an open PR, check merge state **before** stacking more commits:
    - `gh pr list --head $(git branch --show-current) --state all --json number,state,mergedAt`
    - If `MERGED`: do **not** keep committing on this branch. Follow `CLAUDE.md` — stash if needed, fast-forward `main`, start a **new** branch for follow-up work.
+   - If it is **not** merged and `git log origin/main..HEAD` is non-empty: **keep this branch**. Rebase onto `origin/main` if behind; do not open a second branch for the same line of work.
 4. If `git rev-parse --verify MERGE_HEAD` or `.git/rebase-merge` exists, finish or abort that operation first; do not stash over an in-progress merge/rebase without asking the user.
 
 Only after the branch is aligned with intent (rebased on current `main` or confirmed still the right feature branch) should you edit files.

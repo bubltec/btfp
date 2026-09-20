@@ -17,7 +17,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export type CurrentUser = User;
 
 export const api = {
-  listThings: (params: { q?: string; petType?: string; thingType?: string; breed?: string } = {}) => {
+  listThings: (
+    params: { q?: string; petType?: string; thingType?: string; breed?: string } = {},
+  ) => {
     const entries = Object.entries(params).filter((entry): entry is [string, string] =>
       Boolean(entry[1]),
     );
@@ -39,6 +41,8 @@ export const api = {
   submitContribution: (payload: Record<string, unknown>, thingId?: string) =>
     request('/contributions', { method: 'POST', body: JSON.stringify({ thingId, payload }) }),
   listPendingContributions: () => request<unknown[]>('/contributions/pending'),
+  unlockDevContributor: () =>
+    request<{ verifiedContributor: boolean }>('/auth/test/verify', { method: 'POST' }),
   requestProfessionalVerification: (email: string) =>
     request<{ orgClassification?: string }>('/verification/professional/request', {
       method: 'POST',
