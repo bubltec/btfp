@@ -69,6 +69,38 @@ describe('run', () => {
     expect(search).not.toHaveBeenCalled();
   });
 
+  it('does not file a hazard report that has no name, but still marks the topic done', async () => {
+    const db = mockAws(DynamoDBDocumentClient);
+    db.on(GetCommand).resolves({});
+    db.on(ScanCommand).resolves({ Items: [] });
+    db.on(QueryCommand).resolves({ Items: [] });
+    db.on(PutCommand).resolves({});
+    const remember = vi.fn(async () => undefined);
+
+    await run(
+      config,
+      client(),
+      deps({
+        memory: { alreadyCollected: async () => false, remember },
+        classify: async () => ({ isPetHazardReport: true, summary: 'Something vague.' }),
+      }),
+    );
+
+    const items = db
+      .commandCalls(PutCommand)
+      .map(
+        (call: { args: [{ input: { Item?: Record<string, unknown> } }] }) =>
+          call.args[0].input.Item ?? {},
+      );
+    expect(
+      items.some((i: Record<string, unknown>) => String(i.SK ?? '').startsWith('CONTRIB#')),
+    ).toBe(false);
+    expect(items.some((i: Record<string, unknown>) => i.PK === 'SCRAPERTREND#xylitol gum')).toBe(
+      true,
+    );
+    expect(remember).toHaveBeenCalledWith('xylitol gum', expect.stringContaining('not filed'));
+  });
+
   it('writes a pending contribution for a classified hazard and marks the topic', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(GetCommand).resolves({});

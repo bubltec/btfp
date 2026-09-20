@@ -4,7 +4,7 @@ import type { ScraperConfig } from './config.js';
 import { classifyDocument } from './extract/classify.js';
 import { loadTaxonomy, loadThingCatalog } from './taxonomy.js';
 import { isTopicProcessed, markTopicProcessed } from './seen.js';
-import { writeContribution } from './contribution.js';
+import { isFileableExtraction, writeContribution } from './contribution.js';
 import { GatewaySearchClient } from './search/gateway.js';
 import { documentFromHits, type SearchClient } from './search/types.js';
 import { AgentCoreMemoryStore, NoopMemoryStore } from './memory/agentcore.js';
@@ -93,7 +93,8 @@ export async function run(
       document,
       taxonomy,
     );
-    if (extraction?.isPetHazardReport) {
+    const fileable = Boolean(extraction?.isPetHazardReport && isFileableExtraction(extraction));
+    if (fileable && extraction) {
       await writeContribution(db, document, extraction, catalog);
       candidateCount += 1;
     }
@@ -101,9 +102,11 @@ export async function run(
     await markTopicProcessed(db, topic.term);
     await deps.memory.remember(
       topic.term,
-      extraction?.isPetHazardReport
-        ? `Hazard candidate: ${extraction.thingName ?? topic.term}. ${extraction.summary ?? ''}`
-        : 'Not classified as a pet-hazard report.',
+      fileable && extraction
+        ? `Hazard candidate: ${extraction.thingName}. ${extraction.summary ?? ''}`
+        : extraction?.isPetHazardReport
+          ? 'Pet-hazard report without a usable name and type; not filed.'
+          : 'Not classified as a pet-hazard report.',
     );
   }
 

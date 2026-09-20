@@ -7,6 +7,7 @@
     "seed:local": "tsx src/run.ts --endpoint http://localhost:8000",
     "scrape:vetmeds": "tsx src/scrape-vetmeds.ts",
     "review:similar": "tsx src/review-similar-run.ts",
+    "reject:unreviewable": "tsx src/reject-unreviewable-run.ts",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run"
   },
