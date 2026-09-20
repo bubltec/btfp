@@ -40,9 +40,17 @@ WAF at the CloudFront layer covers both.
 1. User signs in via GitHub OAuth (`AuthModule`) — see
    [verification-flow.md](verification-flow.md) for why GitHub specifically and how the
    quiz gate works.
-2. Verified users `POST /api/contributions`, which writes a pending item under the target
-   Thing's partition (or a fresh id for a new Thing) — never directly to the live item.
-3. A verified contributor can review the queue at `GET /api/contributions/pending` and
-   `POST /api/contributions/:thingId/:sk/approve`, which promotes the payload into a real
-   `Thing` item. There's no admin-role check yet — see the note in
+2. Verified users `POST /api/contributions`. Identity matching
+   (`planContributionAttach` in `packages/shared-types`) is shared by the BFF and the
+   scraper: an explicit `thingId`, else a catalog match (`SearchService.findDuplicate`),
+   else an already-pending queue row. A match **accumulates** new payload fields onto
+   that pending row (`mergeThingPayload`) instead of inserting another card. A miss
+   writes a pending item under the target Thing's partition (or a fresh id) — never
+   directly to the live item.
+3. `GET /api/contributions/pending` clusters leftover duplicates of the same identity
+   into one card. `POST /api/contributions/:thingId/:sk/approve` folds sibling pending
+   payloads into the live `Thing` (`mergeThings`) and marks those rows approved.
+   Dynamo access for the queue goes through `PendingContributionStore` (Dynamo adapter
+   in the BFF; the scraper talks to the table directly but uses the same shared-types
+   plan). There's no admin-role check yet — see the note in
    `contributions.controller.ts`.

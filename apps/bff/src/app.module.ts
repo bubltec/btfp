@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BffDynamoModule } from './dynamo/bff-dynamo.module.js';
 import { MycotaAuthModule } from '@bubltec/mycota-auth';
-import { ProfessionalVerificationModule } from '@bubltec/mycota-professional-verification';
+import { ProfessionalVerificationModule } from './professional-verification/professional-verification.module.js';
 import { PetTypesModule } from './pet-types/pet-types.module.js';
 import { BreedsModule } from './breeds/breeds.module.js';
 import { ThingTypesModule } from './thing-types/thing-types.module.js';

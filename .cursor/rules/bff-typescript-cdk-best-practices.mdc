@@ -1,0 +1,260 @@
+---
+description: Best practices for this pnpm + turbo TypeScript monorepo — a NestJS BFF on a single Lambda, shared packages, and AWS CDK infrastructure. Covers repo layout, naming, module organization, config and secrets, testing, tooling, CI/CD, and CDK conventions.
+globs: apps/bff/**/*.ts,infra/cdk/**/*.ts,packages/**/*.ts,data/**/*.ts,.github/workflows/*.yml,*.json
+alwaysApply: false
+---
+
+# TypeScript BFF + AWS CDK Best Practices and Coding Standards
+
+Conventions for building and shipping the BFF (`apps/bff`) and its AWS infrastructure (`infra/cdk`). Items marked **(recommended)** are not adopted in the repo yet; everything else describes what the repo already does and should keep doing.
+
+## 1. Code Organization and Structure
+
+### Directory Structure
+
+Top-level folders are split by deployable role, not by technical layer.
+
+*   **`apps/`**: Deployable applications. Each is its own pnpm workspace package.
+    *   **`bff/`**: NestJS + Fastify API. One Lambda in production, a plain Node server locally.
+    *   **`web/`**: Vite/React frontend. Never talks to AWS directly; only calls `/api/*`.
+    *   **`scraper/`**: Scheduled data-ingestion job.
+    *   **`e2e/`**: Playwright tests that run against a deployed stage.
+*   **`packages/`**: Libraries shared by apps and infra.
+    *   **`shared-types/`**: Contracts and pure logic used by both `web` and `bff`. No decorators, no Node-only APIs, no AWS SDK.
+    *   **`config/`**: Shared `tsconfig-*.json` presets.
+*   **`infra/cdk/`**: The CDK app. `bin/` instantiates, `lib/` holds stacks and helpers, `lambda/` holds small non-BFF function code, `scripts/` holds operational scripts.
+*   **`data/`**: Seed and data-prep tooling.
+*   **`docs/`**: Architecture, data model, CI/CD, infra and cost notes. Update the relevant doc in the same PR as the change.
+*   **`scripts/`**: Repo-level helper scripts.
+*   **`assets/`**: Static assets not owned by an app.
+*   **`.github/`**: `workflows/` (CI and deploy) and `CODEOWNERS`.
+*   **`.claude/skills/`** and **`.cursor/rules/`**: Agent instructions. Keep them short and task-specific.
+
+Example:
+
+```plain text
+root-project/
+├── .claude/
+│   └── skills/
+├── .cursor/
+│   └── rules/
+├── .github/
+│   ├── workflows/
+│   │   ├── ci.yml
+│   │   └── deploy.yml
+│   └── CODEOWNERS
+├── apps/
+│   ├── bff/
+│   │   ├── scripts/build-lambda.mjs
+│   │   └── src/
+│   │       ├── app.ts                # createApp(): shared by lambda.ts and main.ts
+│   │       ├── app.module.ts
+│   │       ├── lambda.ts             # Lambda entrypoint
+│   │       ├── main.ts               # local dev entrypoint
+│   │       ├── mycota-config.ts      # the one place env vars become typed config
+│   │       ├── dynamo/
+│   │       ├── filters/
+│   │       ├── types/                # ambient .d.ts
+│   │       └── <feature>/            # things/, contributions/, search/, ...
+│   ├── e2e/
+│   ├── scraper/
+│   └── web/
+├── assets/
+├── data/
+├── docs/
+├── infra/
+│   └── cdk/
+│       ├── bin/app.ts
+│       ├── lambda/
+│       ├── lib/
+│       └── scripts/
+├── packages/
+│   ├── config/
+│   └── shared-types/
+├── scripts/
+├── .nvmrc
+├── .oxfmtrc.json
+├── .oxlintrc.json
+├── CLAUDE.md
+├── lefthook.yml
+├── package.json
+├── pnpm-lock.yaml
+├── pnpm-workspace.yaml
+├── README.md
+├── tsconfig.base.json
+└── turbo.json
+```
+
+### Root Configuration Files
+
+Each file owns one concern. Put a setting in the most specific place that owns it.
+
+| File | Owns |
+| --- | --- |
+| `package.json` | `engines`, pinned `packageManager`, root scripts that fan out through turbo |
+| `pnpm-workspace.yaml` | Workspace globs, install/supply-chain policy (`minimumReleaseAge*`), native build allowlist |
+| `tsconfig.base.json` | Strict compiler baseline for every package |
+| `packages/config/tsconfig-*.json` | Per-runtime presets (Node, React) that extend the base |
+| `turbo.json` | Task graph and cache outputs |
+| `.oxlintrc.json` / `.oxfmtrc.json` | Lint and format rules (oxlint + oxfmt, not ESLint/Prettier) |
+| `lefthook.yml` | Pre-commit lint and format on staged files |
+| `.nvmrc` | Local Node version |
+| `docker-compose.yml` | Local dependencies (DynamoDB Local) |
+
+### File Naming Conventions
+
+*   Files are `kebab-case` with a role suffix that says what the file is: `things.controller.ts`, `things.service.ts`, `things.module.ts`, `create-thing.dto.ts`, `stage-error.filter.ts`, `dynamo.constants.ts`.
+*   Classes and types are `PascalCase`. Injection tokens and env-derived constants are `UPPER_SNAKE_CASE` (`DYNAMO_DOC_CLIENT`, `CONTENT_TABLE_NAME`).
+*   Specs sit next to the code they test as `<name>.spec.ts`. Ambient declarations live in `types/*.d.ts`.
+*   CDK files are `<concern>-stack.ts` exporting `<Concern>Stack`. Helpers that are not stacks use a plain descriptive name (`lambda-canary.ts`).
+*   Relative imports use the `.js` extension (NodeNext ESM). Node built-ins use the `node:` prefix.
+*   Type-only imports use `import type` (required by `isolatedModules`).
+
+### Module Organization
+
+*   **A BFF feature is one folder** containing `<feature>.module.ts`, `<feature>.controller.ts`, `<feature>.service.ts`, and a `dto/` folder if it accepts a body. Register the module once in `app.module.ts`.
+*   **Dependency direction is one-way:** `apps/*` and `infra` may depend on `packages/*`; `packages/*` never depends on an app. `shared-types` depends on nothing runtime-heavy.
+*   **Controllers are thin.** They handle HTTP concerns only: routing, guards, DTO binding, status codes. Logic lives in services.
+*   **Cross-feature use goes through the module.** Export the service from its module and import the module. Do not deep-import another feature's internals.
+*   **Wrap external systems behind a port.** A small interface, a real adapter over an *injected* client (no SDK construction inside domain code), and a fake for tests and local runs. This is the same shape the mycota packages use.
+*   **Response shapes the frontend needs live in `packages/shared-types`,** not in the controller.
+*   **Prefer the first-party `@bubltec/mycota-*` packages** (auth, dynamo, config, cdk constructs) before writing a new equivalent.
+
+## 2. TypeScript Standards
+
+*   `strict` and `noUncheckedIndexedAccess` are on. Handle `undefined` from indexed access instead of asserting it away.
+*   No `any`. Use `unknown` and narrow. A justified exception gets a one-line comment (see `test-utils.ts`).
+*   Decorators (`experimentalDecorators`, `emitDecoratorMetadata`) are enabled only in `apps/bff`. Do not let them leak into `shared-types` or the web build.
+*   Model states with discriminated unions and literal types (`'dev' | 'prod'`), not booleans and strings that can drift.
+*   Validate at boundaries only: incoming HTTP bodies, external API responses, and legacy stored data. Trust internal types.
+*   Runtime is Node per `engines` in the root `package.json`. Use ES2023 features freely; do not add polyfills.
+
+## 3. BFF Practices (NestJS + Fastify on Lambda)
+
+### Requests and validation
+
+*   The global `ValidationPipe` runs with `whitelist: true, transform: true`. Consequences you must design for:
+    *   **Every DTO property needs at least one validator decorator,** otherwise `whitelist` silently strips it.
+    *   **A required nested object needs `@IsDefined()` + `@ValidateNested()` + `@Type(() => Dto)`.** `@ValidateNested()` alone only validates the value *if present*; a body missing the property passes and later crashes as a 500 instead of returning a 400.
+    *   Arrays of nested DTOs use `@IsArray()` + `@ValidateNested({ each: true })` + `@Type(...)`.
+*   Add a pipe-level regression test whenever a DTO shape changes (see `create-contribution.dto.spec.ts`): it must use the same pipe options as `app.ts`.
+*   Client mistakes are `4xx`. Throw the matching `HttpException` subclass (`BadRequestException`, `NotFoundException`, ...). A `500` means a bug, and a `500` from bad input is itself a bug.
+
+### Auth and errors
+
+*   Gate routes with `JwtAuthGuard` / `VerifiedGuard` from the auth package. Do not hand-roll auth checks in controllers.
+*   Prod returns a generic 500 body. Non-prod stages return the underlying message via `StageErrorFilter`. Never leak internals in prod.
+
+### Configuration
+
+*   Environment variables are read in **one** place (`mycota-config.ts` and the Dynamo constants) and passed down as typed config. Do not scatter `process.env` through services.
+*   Local defaults must be obviously fake (`change-me-in-local-env`) and must never work in a deployed stage.
+
+### Data access
+
+*   DynamoDB is single-table (`PK`/`SK` plus `GSI1`/`GSI2`); see `docs/data-model.md` before adding an access pattern.
+*   Use the injected `DYNAMO_DOC_CLIENT`. Never construct an SDK client inside a service.
+*   Prefer `Query` on a key or GSI. A `Scan` is acceptable only for the small, cached catalog read; paginate on `LastEvaluatedKey` and never issue one per request.
+*   After writing a `Thing`, call `SearchService.invalidate()` so the 60s cache does not serve stale rows.
+*   Data already in the table can predate a schema change. Sanitize at the read boundary rather than assuming current types.
+
+### Lambda and cold starts
+
+*   `lambda.ts` and `main.ts` both call the same `createApp()`, so anything wired into `AppModule` works locally and deployed with no extra step.
+*   Bootstrap once per container (`proxy ??= await bootstrap()`). Resolve secrets during bootstrap, before providers that read them are constructed.
+*   Reuse SDK clients across invocations (module scope or DI singletons). Do no heavy work at import time.
+*   Size timeouts for a cold container, not a warm one (email sign-in does DNS + fetch + Bedrock + SES in one request).
+
+## 4. Security
+
+*   **No secrets in the repo, in `config.ts`, or in plaintext Lambda environment variables.** Store secrets as SSM `SecureString` (or Secrets Manager) and fetch them at cold start, as the GitHub client secret already does. Non-secret identifiers (client IDs, table names, region) may be plain env vars.
+*   Placeholders like `REPLACE_BEFORE_DEPLOYING_*` must fail loudly if they reach a deployed stage, never fall through to a working default.
+*   CI authenticates to AWS with GitHub OIDC. No long-lived access keys anywhere.
+*   IAM is least privilege (see CDK section). Any wildcard resource needs a comment that explains why a narrower scope fails.
+*   Dev stages are locked behind WAF Basic Auth. Cookies are `httpOnly` and secure in deployed stages.
+*   Keep dependency policy in `pnpm-workspace.yaml` (`minimumReleaseAge`, with the first-party `@bubltec/*` scope explicitly exempted).
+
+## 5. AWS CDK Best Practices
+
+### Structure
+
+*   `bin/app.ts` only instantiates. It creates the account-level stacks once (`BtfpDns`, `BtfpEmail`, `BtfpCi`) and one `AppStage` per environment (`BtfpDev`, `BtfpProd`).
+*   `AppStage` composes the per-environment stacks (`Data`, `Scraper`, `Api`, `Web`). Dev and prod are the **same composition** parameterized by `EnvConfig`.
+*   One stack per concern: storage in `data-stack.ts`, compute/routing in `api-stack.ts`, edge and DNS in `web-stack.ts`. A genuinely new concern (queue, scheduled job) is a new stack wired in `app-stage.ts`.
+*   Constants and `EnvConfig` live in `lib/config.ts`. Environment-specific behavior branches only on `envConfig.envName`, and only for real differences (removal policy, PITR, deployment preference).
+*   Pass resources between stacks as **typed props** (`contentTable`, `httpApi`), not string exports or `Fn.importValue`.
+
+### Synthesis must be deterministic and credential-free
+
+*   `npx cdk synth "**"` must succeed with no AWS credentials. No `fromLookup`, no `valueFromLookup`. Import by attributes (`fromHostedZoneAttributes`, `fromSecureStringParameterAttributes`) with values from `config.ts`.
+*   No I/O, clock, or randomness at synth time.
+*   Pin the Docker platform (`Platform.LINUX_AMD64`) so a local Apple Silicon build and CI hash to the same image and are not deployed twice.
+
+### Resources
+
+*   Prefer L2 constructs. Drop to L1 or `addPropertyOverride` only when no L2 covers it, and isolate it in a documented helper (`lambda-canary.ts` is the model: the reason, the migration caveat, and the failure mode are all written down).
+*   **Stateful vs stateless:** stateful resources use `RemovalPolicy.RETAIN` and point-in-time recovery in prod, `DESTROY` in dev. DynamoDB is `PAY_PER_REQUEST`.
+*   **Physical names:** do not pin explicit names on resources that may need replacement (Lambda functions, roles) because it blocks create-before-delete. Pin a name only where something external depends on it and replacement is not expected (stateful tables, the CI role), and say why.
+*   **IAM:** use `grant*` methods (`table.grantReadWriteData(fn)`) first. Hand-written `PolicyStatement`s scope actions and resources as tightly as the service allows, with a comment on any wildcard.
+*   **Lambda traffic** goes to the published `live` alias, never `$LATEST`. Prod uses a canary with an alarm that rolls back; dev uses all-at-once.
+*   **Secrets** are referenced (SSM/Secrets Manager + `grantRead`), never inlined into the template.
+*   **Cost:** check `docs/infra.md` before adding anything with a fixed monthly cost (ALB, NAT, OpenSearch, always-on compute). The budget assumes everything scales to zero.
+
+### Verification (recommended, not adopted yet)
+
+*   **(recommended)** Add `aws-cdk-lib/assertions` tests under `infra/cdk` for the properties that matter: prod tables `RETAIN` + PITR on, Lambda role has no `*` actions, canary configured for prod. Run them in the turbo `test` task.
+*   **(recommended)** Add `cdk-nag` (AwsSolutions pack) as an `Aspect` in `bin/app.ts`, with each suppression carrying a written reason.
+*   **(recommended)** Apply `Tags.of(app)` for `env`, `service`, and `owner` so cost reports can be split by stage.
+
+## 6. Testing
+
+*   Runner is `vitest`. Specs live beside source as `*.spec.ts`. Each package owns its own `test` script; turbo runs them all.
+*   Unit-test services against fakes/mocks. Mock AWS with `aws-sdk-client-mock` through the shared `mockAws` helper. Unit tests never touch real AWS.
+*   Test through the real `ValidationPipe` configuration when a DTO is involved, not by constructing DTO instances by hand.
+*   Reproduce a bug in a failing test first, then fix it. If the failure only appears deployed, pull the actual server logs (CloudWatch) instead of inferring from a generic 500.
+*   `apps/e2e` (Playwright) runs against a **deployed stage**. Assert on the response body, not only the status, so a failure explains itself.
+*   Do not add retries to an e2e test to paper over a failure until you know whether it is infrastructure flake or a real defect.
+
+## 7. Tooling and Automation
+
+*   Package manager is the pinned pnpm in `packageManager`; Node follows `engines`. Do not use npm or yarn.
+*   Lint and format with oxlint and oxfmt. `lefthook` runs them on staged files at commit. Do not add ESLint or Prettier alongside.
+*   Before opening a PR run: `pnpm turbo run typecheck lint build test`.
+*   `turbo.json` expresses task order (`dependsOn: ["^build"]`); do not hand-order builds in scripts.
+*   Use conventional-commit style PR titles (`fix:`, `feat:`).
+
+### Build and bundling
+
+*   The BFF builds with **`tsc` first, then `esbuild`** (`scripts/build-lambda.mjs`). `tsc` produces the decorator metadata NestJS DI needs; esbuild's own TS transform does not reproduce it reliably, and DI then silently injects `undefined`.
+*   Bundle to a single minified file with sourcemaps. Externalize optional Nest/Fastify peers you do not use rather than installing them.
+
+## 8. CI/CD
+
+*   **Build once, deploy many.** `build` produces `bff-dist` and `web-dist` artifacts; dev and prod deploy those exact artifacts. Never rebuild per environment.
+*   Pipeline order: build, deploy dev, e2e against dev, `cdk diff` for prod, then prod behind a protected GitHub Environment approval.
+*   Jobs that touch AWS declare `permissions: { id-token: write, contents: read }` and assume the OIDC deploy role. PR-triggered runs get no AWS credentials by design.
+*   The OIDC `sub` claim uses immutable IDs (`owner@id/repo@id`) and changes shape when a job sets `environment:`. Keep both patterns in the trust policy and confirm against a real token.
+*   Deploy workflows use a non-cancelling `concurrency` group so an in-flight deploy is never aborted.
+*   Pin third-party actions to a major version at minimum.
+
+## 9. Performance
+
+*   Cold start is the dominant latency. Keep the bundle small, avoid import-time work, and reuse clients.
+*   Cache read-mostly data in memory with a short TTL and explicit invalidation on write, rather than adding a managed search or cache service before the dataset needs it.
+*   Right-size Lambda memory and timeout deliberately, and record the reason in a comment beside the value.
+
+## 10. Common Pitfalls
+
+*   **Missing required nested body → 500.** `@ValidateNested()` without `@IsDefined()` lets an absent property through; the service then dereferences `undefined`.
+*   **Undecorated DTO property is silently stripped** by `whitelist: true`, so the field never reaches the service.
+*   **esbuild-only builds break Nest DI** with no error at build time. Always compile with `tsc` first.
+*   **`fromLookup` breaks credential-free `cdk synth`.** Import by attributes instead.
+*   **Pinned physical names block replacement** of the resource.
+*   **Routing to `$LATEST` instead of the `live` alias** bypasses canary and rollback.
+*   **Passport under Fastify** needs `reply.setHeader`/`reply.end` bound to the raw response before OAuth redirects work.
+*   **DTO instances written to DynamoDB** need `convertClassInstanceToMap` on the document client.
+*   **A wrong OIDC `sub` pattern** fails `AssumeRole` only at deploy time. Check the real claim.
+*   **A first request after deploy is a cold start.** Timeouts and e2e waits must allow for it, but do not assume every post-deploy failure is a cold start.
+*   **Plaintext secrets in Lambda env vars** are visible in the console and in CloudFormation. Use SSM or Secrets Manager.
+
+By following these practices, you keep the BFF, shared packages, and infrastructure consistent, secure, cheap to run, and easy to change.

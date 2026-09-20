@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ContributionsController } from './contributions.controller.js';
 import { ContributionsService } from './contributions.service.js';
+import { PendingContributionStore } from './pending-contribution.store.js';
+import { DynamoPendingContributionStore } from './dynamo-pending-contribution.store.js';
 import { ThingsModule } from '../things/things.module.js';
 import { SearchModule } from '../search/search.module.js';
 
@@ -8,6 +10,9 @@ import { SearchModule } from '../search/search.module.js';
 @Module({
   imports: [ThingsModule, SearchModule],
   controllers: [ContributionsController],
-  providers: [ContributionsService],
+  providers: [
+    { provide: PendingContributionStore, useClass: DynamoPendingContributionStore },
+    ContributionsService,
+  ],
 })
 export class ContributionsModule {}

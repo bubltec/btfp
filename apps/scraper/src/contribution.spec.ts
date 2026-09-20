@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mockAws } from './test-utils.js';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { SCRAPER_CONTRIBUTOR_ID, writeContribution } from './contribution.js';
 import type { CandidateDocument } from './search/types.js';
@@ -28,6 +28,7 @@ describe('writeContribution', () => {
   it("writes an item matching contributions.service.ts propose()'s exact key shape", async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
+    db.on(QueryCommand).resolves({ Items: [] });
 
     const contribution = await writeContribution(
       DynamoDBDocumentClient.from(new DynamoDBClient({})),
@@ -50,6 +51,7 @@ describe('writeContribution', () => {
   it('preserves the search source URL, severity, and trend term', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
+    db.on(QueryCommand).resolves({ Items: [] });
 
     const contribution = await writeContribution(
       DynamoDBDocumentClient.from(new DynamoDBClient({})),
@@ -66,6 +68,7 @@ describe('writeContribution', () => {
   it('defaults to an empty petTypes array when the extraction has no petTypeId', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
+    db.on(QueryCommand).resolves({ Items: [] });
 
     const contribution = await writeContribution(
       DynamoDBDocumentClient.from(new DynamoDBClient({})),
@@ -79,6 +82,7 @@ describe('writeContribution', () => {
   it('attaches to an existing Thing when the extracted name matches the catalog', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
+    db.on(QueryCommand).resolves({ Items: [] });
 
     const contribution = await writeContribution(
       DynamoDBDocumentClient.from(new DynamoDBClient({})),

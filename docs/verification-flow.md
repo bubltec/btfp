@@ -90,7 +90,10 @@ Either way, the mechanism itself:
    not the full email — keeps the local-part private from reviewers) at
    `GET /verification/professional/pending` and approve/reject it. Same
    "any verified contributor can moderate" pattern as contribution review — see the gap
-   noted below.
+   noted below. `HydratingUsersService` sanitizes this list: mycota strips PK, and some
+   older rows never stored `id`, which produced
+   `POST /verification/professional/undefined/review`. Missing identity is backfilled
+   from `USER#provider#accountId` before the mycota review path runs.
 
 Approving sets `verifiedContributor: true` (same unlock as the quiz) and, on any
 contribution later approved from that user, stamps `details.verifiedOrgDomain` on the

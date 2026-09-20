@@ -1,25 +1,26 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { instanceToPlain } from 'class-transformer';
 import { randomUUID } from 'node:crypto';
 import {
-  GetCommand,
-  PutCommand,
-  QueryCommand,
-  UpdateCommand,
-  DynamoDBDocumentClient,
-} from '@aws-sdk/lib-dynamodb';
-import { mergeThings, type Contribution, type Thing, type ThingIdentity } from '@btfp/shared-types';
-import { DYNAMO_DOC_CLIENT } from '@bubltec/mycota-dynamo';
+  clusterPendingContributions,
+  contributionsMatch,
+  mergeThingPayload,
+  mergeThings,
+  planContributionAttach,
+  type Contribution,
+  type Thing,
+  type ThingIdentity,
+} from '@btfp/shared-types';
 import { UsersService } from '@bubltec/mycota-auth';
-import { CONTENT_TABLE_NAME } from '../dynamo/dynamo.constants.js';
 import { ThingsService } from '../things/things.service.js';
 import { SearchService } from '../search/search.service.js';
 import type { CreateContributionDto } from './dto/create-contribution.dto.js';
+import { PendingContributionStore, type PendingRow } from './pending-contribution.store.js';
 
 @Injectable()
 export class ContributionsService {
   constructor(
-    @Inject(DYNAMO_DOC_CLIENT) private readonly db: DynamoDBDocumentClient,
+    private readonly queue: PendingContributionStore,
     private readonly things: ThingsService,
     private readonly users: UsersService,
     private readonly search: SearchService,
@@ -34,81 +35,60 @@ export class ContributionsService {
       throw new BadRequestException('payload.name and payload.thingTypeId are required');
     }
 
-    const id = randomUUID();
-    const now = new Date().toISOString();
-    const linkedThingId = normalizeLinkedThingId(dto.thingId);
-    const duplicateId =
-      !linkedThingId && dto.payload.name && dto.payload.thingTypeId
-        ? normalizeLinkedThingId((await this.search.findDuplicate(dto.payload))?.id)
-        : undefined;
-    const existingId = linkedThingId ?? duplicateId;
-    // ValidationPipe leaves nested DTOs as class instances; Dynamo's
-    // marshaller rejects those unless convertClassInstanceToMap is enabled.
     const payload = JSON.parse(
       JSON.stringify(instanceToPlain(dto.payload)),
     ) as Contribution['payload'];
-    const contribution: Contribution = {
-      id,
-      thingId: existingId,
-      contributorId: contributor,
-      status: 'pending',
-      payload,
-      createdAt: now,
-    };
+    const identity = payload as ThingIdentity;
+    const linkedThingId = normalizeLinkedThingId(dto.thingId);
+    const catalogMatchId = !linkedThingId
+      ? normalizeLinkedThingId((await this.search.findDuplicate(identity))?.id)
+      : undefined;
+    // Full pending set (not Limit) so attach can see older cards of the same
+    // identity. The queue is small; this is a GSI Query, not a table Scan.
+    const pending = await this.queue.listAll();
+    const { pendingMatch, thingId } = planContributionAttach({
+      payload: identity,
+      explicitThingId: linkedThingId,
+      catalogMatchId,
+      pending,
+    });
 
-    const targetThingId = existingId ?? id;
-    // Document client on Lambda does not strip undefined attributes — a missing
-    // thingId on new submissions must be omitted, not set to undefined.
-    const item: Record<string, unknown> = {
-      ...contribution,
-      PK: `THING#${targetThingId}`,
-      SK: `CONTRIB#${now}#${contributor}`,
-      GSI2PK: 'STATUS#pending',
-      GSI2SK: `CONTRIB#${now}`,
-    };
-    if (existingId === undefined) delete item.thingId;
+    if (pendingMatch) {
+      const existing = pendingMatch as PendingRow;
+      const merged = mergeThingPayload(existing.payload, payload);
+      const linked = thingId ?? existing.thingId;
+      if (!existing.SK) {
+        return this.insertPending(payload, linked, contributor);
+      }
+      await this.queue.accumulate(existing, payload, linked);
+      return { ...existing, payload: merged, thingId: linked };
+    }
 
-    await this.db.send(
-      new PutCommand({
-        TableName: CONTENT_TABLE_NAME,
-        Item: item,
-      }),
-    );
-
-    return contribution;
+    return this.insertPending(payload, thingId, contributor);
   }
 
   async listPending(limit = 50): Promise<Contribution[]> {
-    const result = await this.db.send(
-      new QueryCommand({
-        TableName: CONTENT_TABLE_NAME,
-        IndexName: 'GSI2',
-        KeyConditionExpression: 'GSI2PK = :pk',
-        ExpressionAttributeValues: { ':pk': 'STATUS#pending' },
-        // Newest first so recent scraper/user rows aren't buried under
-        // pre-payload legacy contribs (which we drop below).
-        ScanIndexForward: false,
-        Limit: limit,
-      }),
-    );
-    return ((result.Items ?? []) as Contribution[]).filter(hasPayload);
+    return clusterPendingContributions(await this.queue.listAll()).slice(0, limit);
   }
 
   async approve(thingId: string, sk: string, reviewerId: string): Promise<Thing> {
-    const existing = await this.db.send(
-      new GetCommand({ TableName: CONTENT_TABLE_NAME, Key: { PK: `THING#${thingId}`, SK: sk } }),
-    );
-    const contribution = existing.Item as (Contribution & { PK: string; SK: string }) | undefined;
+    const contribution = await this.queue.get(thingId, sk);
     if (!contribution) throw new NotFoundException('Contribution not found');
     if (!hasPayload(contribution)) {
       throw new BadRequestException('Contribution is missing payload and cannot be approved');
     }
 
+    const siblings = (await this.queue.listAll()).filter(
+      (row) =>
+        row.SK !== contribution.SK && hasPayload(row) && contributionsMatch(contribution, row),
+    );
+    let payload = contribution.payload;
+    for (const sibling of siblings) {
+      payload = mergeThingPayload(payload, sibling.payload);
+    }
+
     const now = new Date().toISOString();
     const contributor = await this.users.getById(contribution.contributorId);
-    const payload = contribution.payload;
-    // Explicit edits target contribution.thingId. A "new" thing that matches
-    // an existing row is folded into that row instead of inserting a duplicate.
     const duplicate =
       !contribution.thingId && payload.name && payload.thingTypeId
         ? await this.search.findDuplicate(payload as ThingIdentity)
@@ -117,18 +97,13 @@ export class ContributionsService {
       ? await this.things.getById(contribution.thingId)
       : (duplicate ?? null);
 
-    const details = { ...existingThing?.details, ...payload.details };
-    if (contributor?.professional?.status === 'verified') {
-      details.verifiedOrgDomain = contributor.professional.domain;
-    }
-
     const incoming: Thing = {
       id: existingThing?.id ?? contribution.thingId ?? thingId,
       name: payload.name ?? existingThing?.name ?? 'Unnamed',
       otherNames: payload.otherNames ?? existingThing?.otherNames ?? [],
       thingTypeId: payload.thingTypeId ?? existingThing?.thingTypeId ?? 'unknown',
       petTypes: payload.petTypes ?? existingThing?.petTypes ?? [],
-      details,
+      details: payload.details ?? {},
       source:
         payload.source ?? existingThing?.source ?? `contributor:${contribution.contributorId}`,
       sourceUrl: payload.sourceUrl ?? existingThing?.sourceUrl,
@@ -140,39 +115,40 @@ export class ContributionsService {
 
     const thing: Thing = !existingThing
       ? incoming
-      : contribution.thingId
-        ? {
-            ...existingThing,
-            ...incoming,
-            id: existingThing.id,
-            details,
-            createdAt: existingThing.createdAt,
-          }
-        : {
-            ...mergeThings(existingThing, incoming),
-            verified: true,
-            contributorId: contribution.contributorId,
-            updatedAt: now,
-            details,
-          };
+      : {
+          ...mergeThings(existingThing, incoming),
+          verified: true,
+          contributorId: contribution.contributorId,
+          updatedAt: now,
+        };
+    if (contributor?.professional?.status === 'verified') {
+      thing.details = {
+        ...thing.details,
+        verifiedOrgDomain: contributor.professional.domain,
+      };
+    }
     await this.things.putThing(thing);
-
-    await this.db.send(
-      new UpdateCommand({
-        TableName: CONTENT_TABLE_NAME,
-        Key: { PK: `THING#${thingId}`, SK: sk },
-        UpdateExpression:
-          'SET #status = :approved, reviewedAt = :now, reviewerId = :reviewer REMOVE GSI2PK, GSI2SK',
-        ExpressionAttributeNames: { '#status': 'status' },
-        ExpressionAttributeValues: {
-          ':approved': 'approved',
-          ':now': now,
-          ':reviewer': reviewerId,
-        },
-      }),
-    );
-
+    await this.queue.markApproved([contribution, ...siblings], reviewerId, now);
     return thing;
+  }
+
+  private async insertPending(
+    payload: Contribution['payload'],
+    thingId: string | undefined,
+    contributorId: string,
+  ): Promise<Contribution> {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const contribution: Contribution = {
+      id,
+      thingId,
+      contributorId,
+      status: 'pending',
+      payload,
+      createdAt: now,
+    };
+    await this.queue.insert(contribution, thingId);
+    return contribution;
   }
 }
 
