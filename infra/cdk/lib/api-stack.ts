@@ -14,13 +14,19 @@ import {
   BEDROCK_INFERENCE_PROFILE_ID,
   BRAVE_SEARCH_API_KEY,
   DEV_JWT_SECRET,
+  FORWARD_TO_ADDRESS,
   GITHUB_CLIENT_ID,
   GITHUB_CLIENT_SECRET_PARAM_NAME,
   PROD_JWT_SECRET,
   ROOT_DOMAIN,
   SES_FROM_ADDRESS,
 } from './config.js';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as cloudwatchActions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as codedeploy from 'aws-cdk-lib/aws-codedeploy';
+import * as logs from 'aws-cdk-lib/aws-logs';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import { publishCurrentAlias } from './lambda-canary.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -78,8 +84,16 @@ export class ApiStack extends cdk.Stack {
       // Email sign-in does DNS + homepage fetch + Bedrock + SES in one request;
       // on a cold container (right after deploy) that can exceed 15s.
       timeout: cdk.Duration.seconds(30),
+      // Explicit group so logs expire. Lambda's auto-created group never does.
+      logGroup: new logs.LogGroup(this, 'BffLogGroup', {
+        retention: isProd ? logs.RetentionDays.ONE_MONTH : logs.RetentionDays.TWO_WEEKS,
+        removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+      }),
       environment: {
         NODE_ENV: 'production',
+        // Maps minified stack frames back to src/*.ts using the bundled .map
+        // (see apps/bff/Dockerfile).
+        NODE_OPTIONS: '--enable-source-maps',
         STAGE: props.envConfig.envName,
         CONTENT_TABLE_NAME: props.contentTable.tableName,
         USERS_TABLE_NAME: props.usersTable.tableName,
@@ -137,6 +151,37 @@ export class ApiStack extends cdk.Stack {
       apiName: `btfp-${props.envConfig.envName}-api`,
       // Alias, not `$LATEST` — otherwise a prod canary never sees user traffic.
       defaultIntegration: new HttpLambdaIntegration('BffIntegration', current),
+    });
+
+    if (isProd) {
+      // The canary alarms only guard a deploy. This one notifies on 5xx in
+      // steady state. The email subscription must be confirmed once by the
+      // recipient (SNS sends a confirmation link) before alerts are delivered.
+      const alerts = new sns.Topic(this, 'AlertsTopic');
+      alerts.addSubscription(new subscriptions.EmailSubscription(FORWARD_TO_ADDRESS));
+      new cloudwatch.Alarm(this, 'ApiServerErrors', {
+        alarmDescription: 'BFF API returned 3+ 5xx responses in 5 minutes',
+        metric: this.httpApi.metricServerError({
+          period: cdk.Duration.minutes(5),
+          statistic: 'sum',
+        }),
+        threshold: 3,
+        evaluationPeriods: 1,
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }).addAlarmAction(new cloudwatchActions.SnsAction(alerts));
+    }
+
+    // HttpLambdaIntegration.grantInvoke is a no-op when the target is an
+    // imported/SAM alias (fn.functionArn is a token, so CDK skips
+    // addPermission). Prod is 500 on every /api/* because :live has no
+    // resource policy. This CfnPermission is a real stack resource on the
+    // alias the HTTP API invokes.
+    new lambda.CfnPermission(this, 'HttpApiInvokeAlias', {
+      action: 'lambda:InvokeFunction',
+      functionName: current.functionArn,
+      principal: 'apigateway.amazonaws.com',
+      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.httpApi.apiId}/*/*`,
     });
 
     new cdk.CfnOutput(this, 'HttpApiUrl', { value: this.httpApi.apiEndpoint });

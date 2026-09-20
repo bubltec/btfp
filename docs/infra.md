@@ -54,6 +54,20 @@ canary never sees user traffic.
 This is plain CDK constructs (`lambda.Alias` + `codedeploy.LambdaDeploymentGroup`) — no SAM
 transform. The behavior is covered by `infra/cdk/lib/lambda-canary.spec.ts`.
 
+### Logging and alerts
+
+- **Format:** in production the BFF logs one JSON object per line (`JsonLogger`,
+  `apps/bff/src/logging/`) with `level`, `requestId`, `context`, `message`, and `stack`. A stack
+  trace stays inside one event instead of being split across CloudWatch events. Local dev keeps
+  Nest's readable console logger. Set `LOG_LEVEL=debug` to include debug lines.
+- **Readable stacks:** the bundle keeps class names (`keepNames`) and ships its `.map`;
+  `NODE_OPTIONS=--enable-source-maps` turns minified frames back into `src/*.ts:line`.
+- **Retention:** the BFF and the SES forwarder use explicit log groups, 14 days on dev and 30
+  on prod (prod logs are retained if the stack is deleted). Lambda's auto-created group never expires.
+- **Alerts:** prod has an alarm on 3+ API 5xx responses in 5 minutes that publishes to an SNS
+  topic emailing `FORWARD_TO_ADDRESS`. SNS emails a confirmation link the first time; alerts are
+  not delivered until it's clicked.
+
 ## Budget (rough, at low/unknown traffic)
 
 | Item | Cost |

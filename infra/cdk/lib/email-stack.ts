@@ -5,6 +5,7 @@ import * as ses from 'aws-cdk-lib/aws-ses';
 import * as sesActions from 'aws-cdk-lib/aws-ses-actions';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import { Platform } from 'aws-cdk-lib/aws-ecr-assets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import {
@@ -92,6 +93,10 @@ export class EmailStack extends cdk.Stack {
         },
       ),
       timeout: cdk.Duration.seconds(30),
+      logGroup: new logs.LogGroup(this, 'ForwarderLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      }),
       environment: {
         MAIL_BUCKET_NAME: mailBucket.bucketName,
         FORWARD_FROM_ADDRESS: `forwarder@${ROOT_DOMAIN}`,
