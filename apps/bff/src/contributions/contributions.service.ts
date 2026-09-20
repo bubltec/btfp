@@ -85,10 +85,13 @@ export class ContributionsService {
         IndexName: 'GSI2',
         KeyConditionExpression: 'GSI2PK = :pk',
         ExpressionAttributeValues: { ':pk': 'STATUS#pending' },
+        // Newest first so recent scraper/user rows aren't buried under
+        // pre-payload legacy contribs (which we drop below).
+        ScanIndexForward: false,
         Limit: limit,
       }),
     );
-    return (result.Items ?? []) as Contribution[];
+    return ((result.Items ?? []) as Contribution[]).filter(hasPayload);
   }
 
   async approve(thingId: string, sk: string, reviewerId: string): Promise<Thing> {
@@ -97,6 +100,9 @@ export class ContributionsService {
     );
     const contribution = existing.Item as (Contribution & { PK: string; SK: string }) | undefined;
     if (!contribution) throw new NotFoundException('Contribution not found');
+    if (!hasPayload(contribution)) {
+      throw new BadRequestException('Contribution is missing payload and cannot be approved');
+    }
 
     const now = new Date().toISOString();
     const contributor = await this.users.getById(contribution.contributorId);
@@ -168,6 +174,10 @@ export class ContributionsService {
 
     return thing;
   }
+}
+
+function hasPayload(item: Contribution | undefined): item is Contribution {
+  return Boolean(item?.payload && typeof item.payload === 'object');
 }
 
 function normalizeLinkedThingId(id: string | undefined): string | undefined {
