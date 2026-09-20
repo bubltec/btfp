@@ -13,9 +13,12 @@ is the fallback for hotfixes or debugging a broken pipeline).
    Lint and format are enforced locally via [Lefthook](contributing.md#git-hooks-lefthook) on
    commit, not re-checked in CI. No AWS credentials exist anywhere in this workflow — PRs can't
    deploy anything, by construction (see [OIDC setup](#github-oidc-setup-for-aws) below).
-2. **Merge.** `main` requires the `CI / check` status to pass first (branch protection, set up
-   once — see [Manual one-time setup](#manual-one-time-setup)). Merging triggers
-   `.github/workflows/deploy.yml`.
+2. **Merge.** `main` is protected by the `main-merge` ruleset (see
+   [Manual one-time setup](#manual-one-time-setup)). Merging triggers
+   `.github/workflows/deploy.yml`, **unless every changed file is documentation** (`*.md`,
+   `*.mdc`, `docs/`, `.cursor/`, `.claude/`, `LICENSE`, `.github/CODEOWNERS`). Then the whole
+   pipeline is skipped, including the prod approval, because there is nothing to build or
+   deploy. On the PR side, the same file set skips the `check` job.
 3. **`build`** — installs (every job reads its Node version from `.nvmrc` via
    `node-version-file`), builds every package (`turbo run typecheck build`), uploads
    `apps/bff/dist` and `apps/web/dist` as GitHub Actions artifacts. Every later job downloads
@@ -63,8 +66,9 @@ not enforced by `ci.yml` — easy to tighten into a required check later if nami
 
 1. Branch off `main` (named per [Branch naming](#branch-naming) above), make the change, push,
    open a PR. `ci.yml` runs automatically.
-2. Once `CI / check` is green, merge. This is the only required step before `main` deploys
-   itself — merging **is** the deploy trigger, there's no separate "now deploy" action.
+2. Once `CI / check` is green and the PR is approved, merge. That is the only required step
+   before `main` deploys itself — merging **is** the deploy trigger, there's no separate "now
+   deploy" action. (A docs-only merge deploys nothing; see step 2 above.)
 3. Watch it run: `gh run watch --repo bubltec/btfp` (or the
    [Actions tab](https://github.com/bubltec/btfp/actions)) picks up the newest run
    automatically. `build` → `deploy-dev` → `e2e` take a few minutes combined.
@@ -190,6 +194,13 @@ Not automatable from CDK — these are GitHub repo settings.
    without it, anyone with admin access can bypass the check and push straight to `main`,
    silently defeating the whole point of requiring it. With this on, there is no direct-push
    path for anyone; every change, including hotfixes, goes through a PR.
+
+   **Observed state (read from the GitHub API, not assumed):** `main` is protected by the
+   `main-merge` ruleset, which requires a pull request with **one approving review**, linear
+   history, and blocks force-push and deletion. It does **not** currently list `CI / check` as a
+   required status, so the check is advisory. Requiring it is safe with the docs-only skip:
+   the `check` job is skipped (a skipped job reports success) rather than the workflow being
+   filtered out, so a docs-only PR is never stuck waiting on a status that never arrives.
 5. **(Pending)** Require an actual approving review before merge, not just the `check` status —
    passing CI was never meant to substitute for a human looking at the diff. Blocked on one
    thing: PRs need to be authored by an identity other than the reviewer's own, since GitHub

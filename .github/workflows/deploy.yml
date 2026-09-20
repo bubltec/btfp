@@ -3,6 +3,17 @@ name: Deploy
 on:
   push:
     branches: [main]
+    # A merge that only touches these has nothing to build or deploy, so it skips
+    # the whole pipeline (including the prod approval). Keep in sync with the
+    # `changes` job in ci.yml. The workflow only skips when EVERY changed file matches.
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.mdc'
+      - 'docs/**'
+      - '.cursor/**'
+      - '.claude/**'
+      - '.github/CODEOWNERS'
+      - 'LICENSE'
 
 concurrency:
   group: deploy-main
