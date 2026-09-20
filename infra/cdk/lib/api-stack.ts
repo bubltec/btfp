@@ -172,18 +172,6 @@ export class ApiStack extends cdk.Stack {
       }).addAlarmAction(new cloudwatchActions.SnsAction(alerts));
     }
 
-    // HttpLambdaIntegration.grantInvoke is a no-op when the target is an
-    // imported/SAM alias (fn.functionArn is a token, so CDK skips
-    // addPermission). Prod is 500 on every /api/* because :live has no
-    // resource policy. This CfnPermission is a real stack resource on the
-    // alias the HTTP API invokes.
-    new lambda.CfnPermission(this, 'HttpApiInvokeAlias', {
-      action: 'lambda:InvokeFunction',
-      functionName: current.functionArn,
-      principal: 'apigateway.amazonaws.com',
-      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.httpApi.apiId}/*/*`,
-    });
-
     new cdk.CfnOutput(this, 'HttpApiUrl', { value: this.httpApi.apiEndpoint });
   }
 }
