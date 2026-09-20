@@ -1,9 +1,45 @@
 import * as cdk from 'aws-cdk-lib';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import {
+  AwsCustomResource,
+  AwsCustomResourcePolicy,
+  PhysicalResourceId,
+} from 'aws-cdk-lib/custom-resources';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as sam from 'aws-cdk-lib/aws-sam';
 
 const CANARY_PERIOD = cdk.Duration.minutes(1);
+
+/** CDK `addAlias('live')` → SAM `AutoPublishAlias` leaves the old alias in Lambda until CFN deletes it, often after SAM tries to create the same name. */
+function deleteOrphanLiveAliasBeforeSam(fn: lambda.Function, cfn: lambda.CfnFunction): void {
+  const migration = new AwsCustomResource(fn, 'SamLiveAliasMigration', {
+    onCreate: {
+      service: '@aws-sdk/client-lambda',
+      action: 'DeleteAliasCommand',
+      parameters: {
+        FunctionName: fn.functionName,
+        Name: 'live',
+      },
+      physicalResourceId: PhysicalResourceId.of(
+        `${cdk.Stack.of(fn).stackName}-${fn.node.id}-sam-live-alias-migration`,
+      ),
+      ignoreErrorCodesMatching: 'ResourceNotFoundException|NotFound',
+    },
+    onUpdate: {
+      service: '@aws-sdk/client-lambda',
+      action: 'GetFunctionCommand',
+      parameters: { FunctionName: fn.functionName },
+      physicalResourceId: PhysicalResourceId.of(
+        `${cdk.Stack.of(fn).stackName}-${fn.node.id}-sam-live-alias-migration`,
+      ),
+    },
+    policy: AwsCustomResourcePolicy.fromSdkCalls({
+      resources: [fn.functionArn, `${fn.functionArn}:*`],
+    }),
+  });
+
+  cfn.node.addDependency(migration);
+}
 
 /**
  * Turns a CDK `Function` into an `AWS::Serverless::Function` so we get SAM's
@@ -30,6 +66,7 @@ export function publishLiveAlias(
   fn.stack.addTransform('AWS::Serverless-2016-10-31');
 
   const cfn = fn.node.defaultChild as lambda.CfnFunction;
+  deleteOrphanLiveAliasBeforeSam(fn, cfn);
   cfn.addOverride('Type', 'AWS::Serverless::Function');
 
   const imageUri = (cfn.code as lambda.CfnFunction.CodeProperty | undefined)?.imageUri;
