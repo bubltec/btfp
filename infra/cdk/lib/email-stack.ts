@@ -5,6 +5,7 @@ import * as ses from 'aws-cdk-lib/aws-ses';
 import * as sesActions from 'aws-cdk-lib/aws-ses-actions';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import { Platform } from 'aws-cdk-lib/aws-ecr-assets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import {
@@ -15,7 +16,7 @@ import {
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HOSTED_ZONE_ID, ROOT_DOMAIN, FORWARD_TO_ADDRESS } from './config.js';
-import { publishLiveAlias } from './lambda-canary.js';
+import { publishCurrentAlias } from './lambda-canary.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -92,6 +93,10 @@ export class EmailStack extends cdk.Stack {
         },
       ),
       timeout: cdk.Duration.seconds(30),
+      logGroup: new logs.LogGroup(this, 'ForwarderLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      }),
       environment: {
         MAIL_BUCKET_NAME: mailBucket.bucketName,
         FORWARD_FROM_ADDRESS: `forwarder@${ROOT_DOMAIN}`,
@@ -99,7 +104,7 @@ export class EmailStack extends cdk.Stack {
       },
     });
 
-    const live = publishLiveAlias(forwarderFn, { type: 'AllAtOnce' });
+    const current = publishCurrentAlias(forwarderFn);
 
     mailBucket.grantRead(forwarderFn);
     forwarderFn.addToRolePolicy(
@@ -109,7 +114,7 @@ export class EmailStack extends cdk.Stack {
       }),
     );
     // sesActions.Lambda's bind() below auto-grants SES invoke permission on
-    // the live alias, so no explicit addPermission call needed here.
+    // the current alias, so no explicit addPermission call needed here.
 
     const ruleSet = new ses.ReceiptRuleSet(this, 'ReceiptRuleSet', {
       receiptRuleSetName: 'btfp-inbound',
@@ -128,7 +133,7 @@ export class EmailStack extends cdk.Stack {
       scanEnabled: true,
       actions: [
         new sesActions.S3({ bucket: mailBucket }),
-        new sesActions.Lambda({ function: live }),
+        new sesActions.Lambda({ function: current }),
       ],
     });
 

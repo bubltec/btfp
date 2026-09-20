@@ -5,17 +5,33 @@ alwaysApply: true
 
 # Sync before code changes
 
+Work sometimes gets committed, pushed, and merged to `main` outside the current
+session — a previous session, a teammate, a direct push — so local state can be
+stale in ways that aren't obvious from `git status` alone.
+
 Before **any** file edit, commit, or new branch work:
 
 1. `git fetch origin`
-2. Compare the **current branch** to its upstream and to `origin/main`:
+2. Compare local `main` with `origin/main`: `git log main..origin/main --oneline`
+3. Compare the **current branch**:
    - `git status -sb`
    - `git log HEAD..origin/main --oneline` (are you behind main?)
-   - `git log origin/main..HEAD --oneline` (unpushed / unmerged work?)
-3. If this branch has (or had) an open PR, check merge state **before** stacking more commits:
-   - `gh pr list --head $(git branch --show-current) --state all --json number,state,mergedAt`
-   - If `MERGED`: do **not** keep committing on this branch. Follow `CLAUDE.md` — stash if needed, fast-forward `main`, start a **new** branch for follow-up work.
-   - If it is **not** merged and `git log origin/main..HEAD` is non-empty: **keep this branch**. Rebase onto `origin/main` if behind; do not open a second branch for the same line of work.
-4. If `git rev-parse --verify MERGE_HEAD` or `.git/rebase-merge` exists, finish or abort that operation first; do not stash over an in-progress merge/rebase without asking the user.
+   - `git log origin/main..HEAD --oneline` (unpushed or unmerged work?)
+4. Check whether the branch's PR already merged:
+   `gh pr list --head <branch> --state all --json number,state,mergedAt,mergeCommit`
+5. Decide:
+   - **PR merged** → stop committing on this branch. Its content is already in
+     `main` under a (possibly squashed) different commit. Follow the
+     `recover-from-merged-branch` rule.
+   - **PR not merged, and the branch has commits not in `origin/main`** → keep
+     working on this branch, and rebase if it is behind. Do not start a second
+     branch for the same work.
+   - **`origin/main` moved, but this branch's PR was not merged** (genuinely
+     unrelated upstream work) → surface that to the user. Do not act on it
+     unilaterally.
+6. **Merge/rebase guard.** If `git rev-parse --verify MERGE_HEAD` succeeds or
+   `.git/rebase-merge` exists, work to reconcile this exact situation is already
+   underway. Finish or abort it first, and ask the user how they want to proceed
+   rather than stashing over it.
 
-Only after the branch is aligned with intent (rebased on current `main` or confirmed still the right feature branch) should you edit files.
+Only edit files once the branch is aligned with intent.

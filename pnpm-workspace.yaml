@@ -10,6 +10,11 @@ allowBuilds:
   '@scarf/scarf': false
   esbuild: true
   lefthook: true
+# Pin exact versions when adding dependencies. Kept in sync with .npmrc.
+saveExact: true
+# Fail (not just warn) when the running Node does not satisfy `engines` (Node 26).
+# Only this setting works: pnpm 11 ignores `engine-strict` in .npmrc.
+engineStrict: true
 # Install native optional deps for both Mac arches so a Rosetta Node
 # (leftover Homebrew at /usr/local) and nvm's arm64 Node can share
 # the same node_modules. See pnpm.io/settings#supportedarchitectures.
@@ -26,3 +31,9 @@ supportedArchitectures:
 minimumReleaseAgeExclude:
   - '@bubltec/*'
   - '@types/node@26.6.1'
+# @nestjs/platform-fastify pins `fastify` to an exact version as a regular
+# dependency, so the app's own `fastify` would otherwise install a second copy
+# and the Fastify plugin types (@fastify/cookie) stop lining up. Keep this equal
+# to the `fastify` version in apps/bff/package.json.
+overrides:
+  fastify: 5.12.5

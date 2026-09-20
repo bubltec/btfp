@@ -32,31 +32,41 @@ deploy gets done, just no longer the routine way changes ship.
     AgentCore Browser and writes unverified `Contribution`s — see
     [docs/scraper.md](./scraper.md).
   - **Api** — one Lambda (container image — see [docs/ci-cd.md](./ci-cd.md)) running the
-    NestJS BFF, behind an API Gateway HTTP API. Traffic hits a `live` alias
-    (`AutoPublishAlias`). Prod canaries 10% / 5 minutes; dev is `AllAtOnce`.
+    NestJS BFF, behind an API Gateway HTTP API. Traffic hits a `current` alias
+    (see [Lambda alias and canary](#lambda-alias-and-canary)).
   - **Web** — S3 (private, OAC) + CloudFront + WAFv2 + ACM cert + Route53 alias record(s).
 
 `BtfpDev` serves `dev.badthingsforpets.com`; `BtfpProd` serves `badthingsforpets.com` and
 `www.badthingsforpets.com`.
 
-### One-time: migrating a function onto SAM's `AutoPublishAlias`
+### Lambda alias and canary
 
-If a Lambda function previously got its `live` alias from a CDK-managed `fn.addAlias('live')`
-(pre-SAM canary setup), SAM's `AutoPublishAlias` cannot create its own `live` alias while
-that one still exists — CloudFormation has no built-in way to order "delete the old alias"
-before "create the new one" without an ordering dependency that cycles back on itself (the
-migration needs the function's name via `Ref`, so it always depends on the function; adding
-the reverse dependency propagates through SAM to the function's generated `Version` and
-`Alias` too, forming a direct cycle). Delete the stale alias by hand, once, before deploying:
+`publishCurrentAlias` (`infra/cdk/lib/lambda-canary.ts`) publishes a `current` alias pointing
+at each deploy's version. Callers must route traffic to the alias, never `$LATEST`, or a
+canary never sees user traffic.
 
-```bash
-aws lambda delete-alias --function-name <physical-function-name> --name live
-```
+- **Dev** (and the SES forwarder): no `canary` option, so the alias flips to the new version
+  immediately and CloudFormation doesn't wait on a CodeDeploy deployment.
+- **Prod**: a CodeDeploy `LambdaDeploymentGroup` shifts 10% of traffic for 5 minutes, then
+  the rest. It rolls back automatically if either alarm fires — `Errors >= 1` on the alias,
+  or on the new version only (an error on the old version must not fail a good deploy).
 
-Safe to run even if the alias doesn't exist (returns `ResourceNotFoundException`). Do this
-right before the deploy that introduces `publishLiveAlias` for that function — the alias is
-briefly gone until SAM recreates it during that same deploy. Fine for dev (Basic-Auth-walled);
-for prod, do it immediately before approving `deploy-prod` to minimize the gap.
+This is plain CDK constructs (`lambda.Alias` + `codedeploy.LambdaDeploymentGroup`) — no SAM
+transform. The behavior is covered by `infra/cdk/lib/lambda-canary.spec.ts`.
+
+### Logging and alerts
+
+- **Format:** in production the BFF logs one JSON object per line (`JsonLogger`,
+  `apps/bff/src/logging/`) with `level`, `requestId`, `context`, `message`, and `stack`. A stack
+  trace stays inside one event instead of being split across CloudWatch events. Local dev keeps
+  Nest's readable console logger. Set `LOG_LEVEL=debug` to include debug lines.
+- **Readable stacks:** the bundle keeps class names (`keepNames`) and ships its `.map`;
+  `NODE_OPTIONS=--enable-source-maps` turns minified frames back into `src/*.ts:line`.
+- **Retention:** the BFF and the SES forwarder use explicit log groups, 14 days on dev and 30
+  on prod (prod logs are retained if the stack is deleted). Lambda's auto-created group never expires.
+- **Alerts:** prod has an alarm on 3+ API 5xx responses in 5 minutes that publishes to an SNS
+  topic emailing `FORWARD_TO_ADDRESS`. SNS emails a confirmation link the first time; alerts are
+  not delivered until it's clicked.
 
 ## Budget (rough, at low/unknown traffic)
 

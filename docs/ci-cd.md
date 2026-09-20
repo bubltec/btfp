@@ -23,9 +23,9 @@ is the fallback for hotfixes or debugging a broken pipeline).
 4. **`deploy-dev`** — assumes the deploy role via OIDC, runs `cdk deploy BtfpDev/*`. The BFF
    Lambda is a container image (`apps/bff/Dockerfile`, `DockerImageCode.fromImageAsset` in
    `infra/cdk/lib/api-stack.ts`) — the Docker build and push to ECR happen automatically inside
-   this one `cdk deploy` call.    API Gateway invokes the function's `live` alias, not `$LATEST` (SAM
-   `AutoPublishAlias` + `DeploymentPreference: AllAtOnce` on dev — no 5-minute
-   canary wait). Dev is never prerendered
+   this one `cdk deploy` call. API Gateway invokes the function's `current` alias, not
+   `$LATEST`; dev cuts over immediately with no CodeDeploy deployment (so no 5-minute canary
+   wait — see [docs/infra.md](./infra.md#lambda-alias-and-canary)). Dev is never prerendered
    (Basic-Auth-walled, `noindex` — see [docs/seo.md](./seo.md)), so that's the whole job.
 5. **`e2e`** — warms dev's BFF with a cheap `GET /api/pet-types` (Nest container cold start
    after deploy), then runs `apps/e2e`'s Playwright suite against

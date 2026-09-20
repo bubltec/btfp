@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dialog } from '@base-ui-components/react/dialog';
+import { Dialog } from '@base-ui/react/dialog';
 import { api } from '../lib/api.js';
 
 type Step = 'email' | 'code' | 'submitted';

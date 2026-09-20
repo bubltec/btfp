@@ -8,9 +8,10 @@ import { ValidationPipe } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { mockAws } from '../test-utils.js';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { CreateContributionDto } from './dto/create-contribution.dto.js';
 import { ContributionsService } from './contributions.service.js';
+import { DynamoPendingContributionStore } from './dynamo-pending-contribution.store.js';
 import type { SearchService } from '../search/search.service.js';
 
 const pipe = new ValidationPipe({ whitelist: true, transform: true });
@@ -33,6 +34,7 @@ describe('Contributions POST pipeline (ValidationPipe → propose → PutCommand
   it('matches the deploy e2e submit body and produces a plain Put item', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
+    db.on(QueryCommand).resolves({ Items: [] });
 
     const dto = (await pipe.transform(e2eSubmitBody, {
       type: 'body',
@@ -40,9 +42,11 @@ describe('Contributions POST pipeline (ValidationPipe → propose → PutCommand
     })) as CreateContributionDto;
 
     const service = new ContributionsService(
-      DynamoDBDocumentClient.from(new DynamoDBClient({}), {
-        marshallOptions: { removeUndefinedValues: true, convertClassInstanceToMap: false },
-      }),
+      new DynamoPendingContributionStore(
+        DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+          marshallOptions: { removeUndefinedValues: true, convertClassInstanceToMap: false },
+        }),
+      ),
       {} as never,
       {} as never,
       { findDuplicate: vi.fn().mockResolvedValue(undefined) } as unknown as SearchService,

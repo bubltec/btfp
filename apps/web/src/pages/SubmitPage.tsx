@@ -136,17 +136,19 @@ export function SubmitPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await api.submitContribution({
-        ...(editingId ? { thingId: editingId } : {}),
-        name,
-        thingTypeId,
-        petTypes: Object.entries(petSeverities).map(([petTypeId, severity]) => ({
-          petTypeId,
-          severity,
-        })),
-        details: { notes },
-        source: source || `contributor:${user?.displayName}`,
-      });
+      await api.submitContribution(
+        {
+          name,
+          thingTypeId,
+          petTypes: Object.entries(petSeverities).map(([petTypeId, severity]) => ({
+            petTypeId,
+            severity,
+          })),
+          details: { notes },
+          source: source || `contributor:${user?.displayName}`,
+        },
+        editingId,
+      );
       setDone(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');

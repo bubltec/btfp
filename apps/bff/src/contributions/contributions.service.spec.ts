@@ -3,10 +3,28 @@ import { describe, expect, it, vi } from 'vitest';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { CreateContributionDto } from './dto/create-contribution.dto.js';
 import { mockAws } from '../test-utils.js';
-import { DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  PutCommand,
+  QueryCommand,
+  UpdateCommand,
+} from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { ContributionsService } from './contributions.service.js';
+import { DynamoPendingContributionStore } from './dynamo-pending-contribution.store.js';
 import type { SearchService } from '../search/search.service.js';
+
+function contributionsService(
+  db: DynamoDBDocumentClient,
+  search: SearchService,
+): ContributionsService {
+  return new ContributionsService(
+    new DynamoPendingContributionStore(db),
+    {} as never,
+    {} as never,
+    search,
+  );
+}
 
 const e2ePayload: CreateContributionDto = {
   payload: {
@@ -24,18 +42,16 @@ describe('ContributionsService.propose', () => {
   it('plainifies ValidationPipe class instances before PutCommand', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
+    db.on(QueryCommand).resolves({ Items: [] });
 
     const dto = (await pipe.transform(e2ePayload, {
       type: 'body',
       metatype: CreateContributionDto,
     })) as CreateContributionDto;
 
-    const service = new ContributionsService(
-      DynamoDBDocumentClient.from(new DynamoDBClient({})),
-      {} as never,
-      {} as never,
-      { findDuplicate: vi.fn().mockResolvedValue(undefined) } as unknown as SearchService,
-    );
+    const service = contributionsService(DynamoDBDocumentClient.from(new DynamoDBClient({})), {
+      findDuplicate: vi.fn().mockResolvedValue(undefined),
+    } as unknown as SearchService);
 
     await service.propose(dto, 'e2e-user');
     const item = db.commandCalls(PutCommand)[0]?.args[0].input.Item as Record<string, unknown>;
@@ -48,15 +64,14 @@ describe('ContributionsService.propose', () => {
   it('writes the same DynamoDB item shape as the scraper (new thing, no duplicate)', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
+    db.on(QueryCommand).resolves({ Items: [] });
 
     const search = {
       findDuplicate: vi.fn().mockResolvedValue(undefined),
     } as unknown as SearchService;
 
-    const service = new ContributionsService(
+    const service = contributionsService(
       DynamoDBDocumentClient.from(new DynamoDBClient({})),
-      {} as never,
-      {} as never,
       search,
     );
 
@@ -74,18 +89,16 @@ describe('ContributionsService.propose', () => {
   });
 
   it('rejects a session with no contributor id', async () => {
-    const service = new ContributionsService(
-      DynamoDBDocumentClient.from(new DynamoDBClient({})),
-      {} as never,
-      {} as never,
-      { findDuplicate: vi.fn() } as unknown as SearchService,
-    );
+    const service = contributionsService(DynamoDBDocumentClient.from(new DynamoDBClient({})), {
+      findDuplicate: vi.fn(),
+    } as unknown as SearchService);
     await expect(service.propose(e2ePayload, '  ')).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('ignores a blank duplicate id and creates a new Thing partition', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
+    db.on(QueryCommand).resolves({ Items: [] });
 
     const search = {
       findDuplicate: vi
@@ -93,10 +106,8 @@ describe('ContributionsService.propose', () => {
         .mockResolvedValue({ id: '   ', name: 'Chocolate', thingTypeId: 'food' }),
     } as unknown as SearchService;
 
-    const service = new ContributionsService(
+    const service = contributionsService(
       DynamoDBDocumentClient.from(new DynamoDBClient({})),
-      {} as never,
-      {} as never,
       search,
     );
 
@@ -109,6 +120,7 @@ describe('ContributionsService.propose', () => {
   it('attaches to an existing Thing id when findDuplicate matches', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
+    db.on(QueryCommand).resolves({ Items: [] });
 
     const search = {
       findDuplicate: vi.fn().mockResolvedValue({
@@ -118,10 +130,8 @@ describe('ContributionsService.propose', () => {
       }),
     } as unknown as SearchService;
 
-    const service = new ContributionsService(
+    const service = contributionsService(
       DynamoDBDocumentClient.from(new DynamoDBClient({})),
-      {} as never,
-      {} as never,
       search,
     );
 
@@ -130,6 +140,58 @@ describe('ContributionsService.propose', () => {
     expect(contribution.thingId).toBe('existing-chocolate');
     const item = db.commandCalls(PutCommand)[0]?.args[0].input.Item as Record<string, unknown>;
     expect(item.PK).toBe('THING#existing-chocolate');
+  });
+
+  it('merges a later Chocolate submit into the existing pending row', async () => {
+    const db = mockAws(DynamoDBDocumentClient);
+    db.on(QueryCommand).resolves({
+      Items: [
+        {
+          id: 'queued',
+          PK: 'THING#existing-chocolate',
+          SK: 'CONTRIB#2026-01-01T00:00:00.000Z#e2e-user',
+          thingId: 'existing-chocolate',
+          contributorId: 'e2e-user',
+          status: 'pending',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          payload: { name: 'Chocolate', thingTypeId: 'food', details: { notes: 'theobromine' } },
+        },
+      ],
+    });
+    db.on(UpdateCommand).resolves({});
+
+    const service = contributionsService(DynamoDBDocumentClient.from(new DynamoDBClient({})), {
+      findDuplicate: vi.fn().mockResolvedValue({
+        id: 'existing-chocolate',
+        name: 'Chocolate',
+        thingTypeId: 'food',
+      }),
+    } as unknown as SearchService);
+
+    const contribution = await service.propose(
+      {
+        payload: {
+          name: 'Chocolate',
+          thingTypeId: 'food',
+          petTypes: [{ petTypeId: 'dog', severity: 'unknown' }],
+          details: { notes: 'theobromine', clinicalSigns: 'vomiting' },
+          source: 'e2e',
+        },
+      },
+      'e2e-user',
+    );
+
+    expect(db.commandCalls(PutCommand)).toHaveLength(0);
+    expect(contribution.thingId).toBe('existing-chocolate');
+    expect(contribution.payload.details).toEqual({
+      notes: 'theobromine',
+      clinicalSigns: 'vomiting',
+    });
+    const update = db.commandCalls(UpdateCommand)[0]?.args[0].input;
+    expect(update.Key).toEqual({
+      PK: 'THING#existing-chocolate',
+      SK: 'CONTRIB#2026-01-01T00:00:00.000Z#e2e-user',
+    });
   });
 });
 
@@ -149,16 +211,42 @@ describe('ContributionsService.listPending', () => {
       ],
     });
 
-    const service = new ContributionsService(
-      DynamoDBDocumentClient.from(new DynamoDBClient({})),
-      {} as never,
-      {} as never,
-      { findDuplicate: vi.fn() } as unknown as SearchService,
-    );
+    const service = contributionsService(DynamoDBDocumentClient.from(new DynamoDBClient({})), {
+      findDuplicate: vi.fn(),
+    } as unknown as SearchService);
 
     const pending = await service.listPending();
     expect(pending).toHaveLength(1);
     expect(pending[0]?.payload).toMatchObject({ name: 'Xylitol' });
     expect(db.commandCalls(QueryCommand)[0]?.args[0].input.ScanIndexForward).toBe(false);
+  });
+
+  it('shows one queue card for several pending Chocolate edits', async () => {
+    const db = mockAws(DynamoDBDocumentClient);
+    db.on(QueryCommand).resolves({
+      Items: [
+        {
+          id: '1',
+          createdAt: '2026-01-02T00:00:00.000Z',
+          thingId: 'choc',
+          payload: { name: 'Chocolate', thingTypeId: 'food' },
+        },
+        {
+          id: '2',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          thingId: 'choc',
+          payload: { name: 'Chocolate', thingTypeId: 'food', details: { notes: 'toxic' } },
+        },
+      ],
+    });
+
+    const service = contributionsService(DynamoDBDocumentClient.from(new DynamoDBClient({})), {
+      findDuplicate: vi.fn(),
+    } as unknown as SearchService);
+
+    const pending = await service.listPending();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]?.id).toBe('1');
+    expect(pending[0]?.payload.details).toEqual({ notes: 'toxic' });
   });
 });

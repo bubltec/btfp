@@ -11,12 +11,12 @@
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.716.0"
+    "@aws-sdk/client-bedrock-runtime": "3.1136.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.56.0",
-    "@types/node": "^26.6.1",
-    "tsx": "^4.19.0",
-    "typescript": "^5.8.0"
+    "@playwright/test": "1.63.0",
+    "@types/node": "26.6.2",
+    "tsx": "4.23.13",
+    "typescript": "7.0.2"
   }
 }

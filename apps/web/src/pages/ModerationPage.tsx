@@ -141,6 +141,10 @@ function ProfessionalVerificationsSection() {
   }, []);
 
   async function review(user: User, approve: boolean) {
+    if (!user.id) {
+      setError('This verification is missing a user id and cannot be reviewed.');
+      return;
+    }
     try {
       const reason = approve ? undefined : (prompt('Rejection reason (optional):') ?? undefined);
       await api.reviewProfessionalVerification(user.id, approve, reason);
@@ -161,9 +165,16 @@ function ProfessionalVerificationsSection() {
       ) : (
         <ul className="mt-4 space-y-3">
           {items.map((user) => (
-            <li key={user.id} className="rounded-cozy border border-paw-200 bg-white p-4">
-              <p className="font-semibold text-neutral-800">{user.displayName}</p>
-              <p className="text-sm text-neutral-500">{user.professional?.domain}</p>
+            <li
+              key={user.id || user.professional?.domain || user.providerAccountId}
+              className="rounded-cozy border border-paw-200 bg-white p-4"
+            >
+              <p className="font-semibold text-neutral-800">
+                {user.displayName || user.professional?.domain || 'Unknown organization'}
+              </p>
+              {user.professional?.domain && user.professional.domain !== user.displayName && (
+                <p className="text-sm text-neutral-500">{user.professional.domain}</p>
+              )}
               {user.professional?.orgClassification && (
                 <p className="mt-1 text-xs text-neutral-400">
                   Bedrock guess: {user.professional.orgClassification.replaceAll('_', ' ')} —{' '}

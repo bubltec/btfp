@@ -34,8 +34,16 @@ await build({
     // fallback is unreachable at runtime.
     'class-transformer/storage',
   ],
+  // @nestjs/swagger 12 is ESM-first and runs `createRequire(import.meta.url)` at
+  // load time. esbuild turns import.meta into an empty object in CJS output, so
+  // that call throws and the whole Lambda fails to start. Give it a real value.
+  banner: { js: "const __importMetaUrl = require('node:url').pathToFileURL(__filename).href;" },
+  define: { 'import.meta.url': '__importMetaUrl' },
   sourcemap: true,
   minify: true,
+  // Minification mangles class names, which are what Nest prints as its log
+  // context ("[e]" instead of "[SearchService]"). Keep them; the size cost is small.
+  keepNames: true,
   logLevel: 'info',
 });
 

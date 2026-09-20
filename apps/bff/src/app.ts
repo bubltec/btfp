@@ -5,11 +5,14 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import fastifyCookie from '@fastify/cookie';
 import { AppModule } from './app.module.js';
+import { corsOrigin, isProduction } from './env.js';
+import { JsonLogger } from './logging/json-logger.js';
 import { StageErrorFilter } from './filters/stage-error.filter.js';
+import { VALIDATION_PIPE_OPTIONS } from './validation.js';
 
 export async function createApp(adapter: FastifyAdapter): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
-    logger: ['error', 'warn', 'log'],
+    logger: isProduction() ? new JsonLogger() : ['error', 'warn', 'log'],
   });
 
   await app.register(fastifyCookie);
@@ -34,10 +37,10 @@ export async function createApp(adapter: FastifyAdapter): Promise<NestFastifyApp
       done();
     });
 
-  app.enableCors({ origin: process.env.WEB_ORIGIN ?? true, credentials: true });
+  app.enableCors({ origin: corsOrigin(), credentials: true });
   // sitemap.xml/robots.txt are excluded so they can live at the site root instead of under /api.
   app.setGlobalPrefix('api', { exclude: ['sitemap.xml', 'robots.txt'] });
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalPipes(new ValidationPipe(VALIDATION_PIPE_OPTIONS));
   if (process.env.STAGE !== 'prod') {
     app.useGlobalFilters(new StageErrorFilter());
   }

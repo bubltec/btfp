@@ -1,6 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { PutCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { findDuplicateThing, type Contribution } from '@btfp/shared-types';
+import {
+  PutCommand,
+  QueryCommand,
+  UpdateCommand,
+  type DynamoDBDocumentClient,
+} from '@aws-sdk/lib-dynamodb';
+import {
+  findDuplicateThing,
+  mergeThingPayload,
+  planContributionAttach,
+  type Contribution,
+} from '@btfp/shared-types';
 import { CONTENT_TABLE_NAME } from './dynamo.js';
 import type { CandidateDocument } from './search/types.js';
 import type { ExtractionResult } from './extract/types.js';
@@ -11,12 +21,29 @@ import type { CatalogThing } from './taxonomy.js';
  * optional chain, which degrades gracefully for an unresolvable id. */
 export const SCRAPER_CONTRIBUTOR_ID = 'system:agentcore-scraper';
 
+async function listPending(db: DynamoDBDocumentClient): Promise<Contribution[]> {
+  const items: Contribution[] = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const result = await db.send(
+      new QueryCommand({
+        TableName: CONTENT_TABLE_NAME,
+        IndexName: 'GSI2',
+        KeyConditionExpression: 'GSI2PK = :pk',
+        ExpressionAttributeValues: { ':pk': 'STATUS#pending' },
+        ExclusiveStartKey: lastKey,
+      }),
+    );
+    items.push(...((result?.Items ?? []) as Contribution[]));
+    lastKey = result?.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (lastKey);
+  return items.filter((item) => item.payload && typeof item.payload === 'object');
+}
+
 /**
- * Exact replica of contributions.service.ts propose()'s item shape. If the
- * extracted name matches an existing Thing, `thingId` is set so approval
- * becomes an edit of that row instead of a duplicate. Reusing this shape
- * means ModerationPage.tsx and the approve() flow need zero changes to
- * handle scraper-sourced candidates.
+ * Same attach/accumulate rules as ContributionsService.propose: catalog
+ * match becomes an edit; an already-queued identity folds new facts into
+ * that pending row instead of another moderation card.
  */
 export async function writeContribution(
   db: DynamoDBDocumentClient,
@@ -24,32 +51,64 @@ export async function writeContribution(
   extraction: ExtractionResult,
   catalog: CatalogThing[] = [],
 ): Promise<Contribution> {
+  const payload: Contribution['payload'] = {
+    name: extraction.thingName,
+    thingTypeId: extraction.thingTypeId,
+    petTypes: extraction.petTypeId
+      ? [{ petTypeId: extraction.petTypeId, severity: extraction.severity ?? 'unknown' }]
+      : [],
+    details: { summary: extraction.summary, trendTerm: document.topic },
+    source: document.source,
+    sourceUrl: document.sourceUrl,
+  };
+
+  const identity =
+    extraction.thingName && extraction.thingTypeId
+      ? { name: extraction.thingName, thingTypeId: extraction.thingTypeId }
+      : undefined;
+  const catalogMatch = identity ? findDuplicateThing(catalog, identity) : undefined;
+  const pending = await listPending(db);
+  const { pendingMatch, thingId } = identity
+    ? planContributionAttach({
+        payload: identity,
+        catalogMatchId: catalogMatch?.id,
+        pending,
+      })
+    : { pendingMatch: undefined, thingId: catalogMatch?.id };
+
+  if (pendingMatch) {
+    const merged = mergeThingPayload(pendingMatch.payload, payload);
+    const row = pendingMatch as Contribution & { PK?: string; SK?: string };
+    const pk = row.PK ?? `THING#${pendingMatch.thingId ?? pendingMatch.id}`;
+    const sk = row.SK;
+    if (sk) {
+      const linked = thingId ?? pendingMatch.thingId;
+      await db.send(
+        new UpdateCommand({
+          TableName: CONTENT_TABLE_NAME,
+          Key: { PK: pk, SK: sk },
+          UpdateExpression: linked
+            ? 'SET payload = :payload, thingId = :thingId'
+            : 'SET payload = :payload',
+          ExpressionAttributeValues: {
+            ':payload': merged,
+            ...(linked ? { ':thingId': linked } : {}),
+          },
+        }),
+      );
+      return { ...pendingMatch, payload: merged, thingId: linked };
+    }
+  }
+
   const id = randomUUID();
   const now = new Date().toISOString();
-  const duplicate =
-    extraction.thingName && extraction.thingTypeId
-      ? findDuplicateThing(catalog, {
-          name: extraction.thingName,
-          thingTypeId: extraction.thingTypeId,
-        })
-      : undefined;
-  const targetThingId = duplicate?.id ?? id;
-
+  const targetThingId = thingId ?? id;
   const contribution: Contribution = {
     id,
-    thingId: duplicate?.id,
+    thingId,
     contributorId: SCRAPER_CONTRIBUTOR_ID,
     status: 'pending',
-    payload: {
-      name: extraction.thingName,
-      thingTypeId: extraction.thingTypeId,
-      petTypes: extraction.petTypeId
-        ? [{ petTypeId: extraction.petTypeId, severity: extraction.severity ?? 'unknown' }]
-        : [],
-      details: { summary: extraction.summary, trendTerm: document.topic },
-      source: document.source,
-      sourceUrl: document.sourceUrl,
-    },
+    payload,
     createdAt: now,
   };
 

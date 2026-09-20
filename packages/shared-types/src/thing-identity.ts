@@ -255,3 +255,50 @@ export function mergeThings(canonical: Thing, extra: Thing): Thing {
     contributorId: canonical.contributorId ?? extra.contributorId,
   };
 }
+
+function mergeDetailsAccumulating(
+  canonical: Record<string, unknown>,
+  extra: Record<string, unknown>,
+): Record<string, unknown> {
+  const details = { ...canonical };
+  for (const [key, value] of Object.entries(extra)) {
+    if (isEmptyDetail(details[key])) {
+      details[key] = value;
+      continue;
+    }
+    if (
+      typeof details[key] === 'string' &&
+      typeof value === 'string' &&
+      value.trim() &&
+      !String(details[key]).includes(value.trim())
+    ) {
+      details[key] = `${details[key]}\n\n${value}`;
+    }
+  }
+  return details;
+}
+
+/**
+ * Fold a later contribution/edit into an earlier payload. New pet types,
+ * aliases, and empty details are added; identical text is not repeated.
+ */
+export function mergeThingPayload(
+  canonical: Partial<Thing>,
+  extra: Partial<Thing>,
+): Partial<Thing> {
+  const name = canonical.name?.trim() || extra.name;
+  return {
+    ...canonical,
+    name,
+    thingTypeId: canonical.thingTypeId ?? extra.thingTypeId,
+    otherNames: uniqueNames(name ?? '', [
+      ...(canonical.otherNames ?? []),
+      ...(extra.name && extra.name !== name ? [extra.name] : []),
+      ...(extra.otherNames ?? []),
+    ]),
+    petTypes: mergePetTypes(canonical.petTypes ?? [], extra.petTypes ?? []),
+    details: mergeDetailsAccumulating(canonical.details ?? {}, extra.details ?? {}),
+    source: canonical.source ?? extra.source,
+    sourceUrl: canonical.sourceUrl ?? extra.sourceUrl,
+  };
+}

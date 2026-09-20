@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { mockAws } from './test-utils.js';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  ScanCommand,
+} from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { run, type ScraperDeps } from './run.js';
 import type { ScraperConfig } from './config.js';
@@ -67,6 +73,7 @@ describe('run', () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(GetCommand).resolves({});
     db.on(ScanCommand).resolves({ Items: [] });
+    db.on(QueryCommand).resolves({ Items: [] });
     db.on(PutCommand).resolves({});
 
     await run(config, client(), deps());
