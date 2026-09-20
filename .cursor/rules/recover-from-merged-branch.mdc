@@ -1,0 +1,28 @@
+---
+description: Stash-and-restart sequence to use when the current branch's PR already merged into main
+alwaysApply: false
+---
+
+# Recover from a merged branch
+
+Use this when `sync-before-code-changes` found that the current branch's own work
+already shipped (its PR merged), so follow-up work needs a fresh branch off the
+latest `main`.
+
+**Precondition:** no merge or rebase in progress (`git rev-parse --verify MERGE_HEAD`
+fails and `.git/rebase-merge` is absent). If one exists, stop and ask the user.
+
+1. **Confirm it merged:**
+   `gh pr list --state merged --head <current-branch> --json number,mergedAt,mergeCommit`.
+   A hit means the content is in `main` under a (possibly squashed) different commit.
+2. **Save uncommitted work:** `git stash -u` (includes untracked files).
+3. **Fast-forward `main` without checking it out:** `git fetch . origin/main:main`
+   from the current (non-main) branch.
+   - Git refuses to fetch into the *checked-out* branch, so do this **before**
+     switching to `main`. If you are already on `main`, use
+     `git merge --ff-only origin/main` instead.
+4. **Branch fresh:** `git checkout -b <new-branch-name> main`.
+5. **Reapply with `git stash apply`, not `pop`.** Keep the stash entry until you
+   have confirmed the reapplied changes are still needed and correct. Some of what
+   was stashed may now be redundant with what already merged.
+6. Once verified, drop the stash entry (`git stash drop`).
