@@ -1,4 +1,12 @@
-import type { Breed, PetType, QuizQuestion, Thing, ThingType, User } from '@btfp/shared-types';
+import type {
+  Breed,
+  PendingContributionCard,
+  PetType,
+  QuizQuestion,
+  Thing,
+  ThingType,
+  User,
+} from '@btfp/shared-types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -43,7 +51,12 @@ export const api = {
     }),
   submitContribution: (payload: Record<string, unknown>, thingId?: string) =>
     request('/contributions', { method: 'POST', body: JSON.stringify({ thingId, payload }) }),
-  listPendingContributions: () => request<unknown[]>('/contributions/pending'),
+  listPendingContributions: () => request<PendingContributionCard[]>('/contributions/pending'),
+  rejectContribution: (thingId: string, sk: string, reason?: string) =>
+    request<{ rejected: number }>(`/contributions/${thingId}/${encodeURIComponent(sk)}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
   unlockDevContributor: () =>
     request<{ verifiedContributor: boolean }>('/auth/test/verify', { method: 'POST' }),
   requestProfessionalVerification: (email: string) =>

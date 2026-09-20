@@ -79,7 +79,7 @@ curated categories apply, not that the breed was skipped. Dog-only for now; cat 
 ## Seeding prod in CI
 
 `deploy-prod` runs `data/seed/src/run.ts` against `btfp-prod-content` after `cdk deploy` (see
-[ci-cd.md](./ci-cd.md)), so merging a change to a *committed* seed source (`dog-breeds.json`,
+[ci-cd.md](./ci-cd.md)), so merging a change to a _committed_ seed source (`dog-breeds.json`,
 `product-activity-hazards.json`) reaches prod automatically — no separate manual seed step, same
 "merge is the deploy trigger" model the rest of the pipeline already uses.
 
@@ -100,8 +100,8 @@ Two things worth knowing about what this automation trades off:
   collapsed before write; ids that existed only as the discarded duplicate are deleted so a
   re-seed doesn't leave both the canonical row and the old extra in the table.
 - **Renamed/split source items are reconciled too, not just same-run duplicates.** The
-  `discarded` list from `dedupeThings` only covers rows collapsed *within the current run* — it
-  says nothing about a row that existed from a *previous* run but whose source item was renamed,
+  `discarded` list from `dedupeThings` only covers rows collapsed _within the current run_ — it
+  says nothing about a row that existed from a _previous_ run but whose source item was renamed,
   split, or removed since then (exactly what happened when the "Onions, garlic, leeks, chives,
   shallots (Allium spp.)" combo entry was split into per-species rows: the old combo name simply
   stops appearing in `uniqueThings`, so it's never in `discarded` either). Left alone, that old
@@ -112,7 +112,7 @@ Two things worth knowing about what this automation trades off:
   approved edit merged into an existing seed row — always have `contributorId` set and are never
   touched by this cleanup, even if their id happens to match a stable id this run no longer emits.
   - **This reconciliation only runs when both gitignored files load.** "Not in this run's output"
-    only means "genuinely renamed/removed" if this run had access to the *complete* intended
+    only means "genuinely renamed/removed" if this run had access to the _complete_ intended
     catalog. CI never has `dog-toxicity-dataset.json`/`vetmeds-toxins.json` (see above), so a CI
     run's `uniqueThings` is always just the committed curated-hazards subset — running orphan
     reconciliation there would (and once did, in production) delete every ASPCA/vetmeds-sourced
@@ -128,8 +128,8 @@ Two things worth knowing about what this automation trades off:
   time rows went missing in practice — see the next point — but it's a real gap worth closing
   regardless.)
 - **Deleting `discarded` rows by id can delete the row you just wrote, for multi-source merges.**
-  `discarded` (from `dedupeThings`) holds the *raw*, pre-merge rows that got folded into a
-  canonical entry. Stable ids are a hash of `thingTypeId`+`name`, so two rows for the *same* item
+  `discarded` (from `dedupeThings`) holds the _raw_, pre-merge rows that got folded into a
+  canonical entry. Stable ids are a hash of `thingTypeId`+`name`, so two rows for the _same_ item
   from different sources — "Garlic" from ASPCA and "Garlic" from vetmeds, say — legitimately share
   an id with the merged canonical row that gets kept. Deleting `discarded` rows by `thing.id`
   without checking whether that id is also in this run's kept set deletes the just-written
@@ -146,7 +146,7 @@ Two things worth knowing about what this automation trades off:
 
 Deterministic dedupe (`dedupeThings` in `packages/shared-types/src/dedupe.ts`) is good at
 collapsing exact/near-exact name matches from overlapping sources, but it can't tell that a
-single row is secretly a *list*. The ASPCA dataset's `"Onions, garlic, leeks, chives, shallots
+single row is secretly a _list_. The ASPCA dataset's `"Onions, garlic, leeks, chives, shallots
 (Allium spp.)"` food entry is the motivating example: five distinct species lumped into one
 row hid that garlic is 3–5x more toxic per gram than the others, and matching against vetmeds'
 separate `"Onions, Garlic and Chives"` entry just merged two combo rows into one bigger combo
@@ -164,7 +164,7 @@ id collision (see the fix in `packages/shared-types/src/dedupe.ts`, below). Not 
 (Advil, Motrin)"`, `"Glue / adhesives"`, `"Nicotine (cigarettes, vape liquid, patches, gum)"`
 are one substance/item under multiple names or brand listings, not a bundle of distinct
 things, and are deliberately left as a single row. The judgment call each time: would a pet
-owner search for these terms *separately*, and does lumping them together hide a real
+owner search for these terms _separately_, and does lumping them together hide a real
 difference (potency, severity, product category) between them? If yes to either, split; if
 the "combo" is really just synonyms or brand names for one thing, leave it — that's also why
 this is a curation aid a human reviews (or Bedrock analyzes) rather than an automatic rule; a

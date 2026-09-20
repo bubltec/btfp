@@ -27,8 +27,8 @@ underlying mechanism (`apps/bff/src/auth/email-code.service.ts`):
   OAuth login. `EmailSignInDialog.tsx` in the frontend.
 - **Add-on to an existing session**: someone already signed in via GitHub/Google can layer
   org verification onto that same account instead — `POST /verification/professional/request`
-  + `/confirm` (`ProfessionalVerificationController`, requires `JwtAuthGuard`). Delegates to
-  the identical underlying service. `ProfessionalVerificationDialog.tsx` in the frontend.
+  - `/confirm` (`ProfessionalVerificationController`, requires `JwtAuthGuard`). Delegates to
+    the identical underlying service. `ProfessionalVerificationDialog.tsx` in the frontend.
 
 Either way, the mechanism itself:
 
@@ -62,9 +62,9 @@ Either way, the mechanism itself:
      Also checked whether Bedrock itself could do this natively instead of calling a
      search API ourselves: the plain Converse API can't — verified empirically (a
      `ConverseCommand` with `additionalModelRequestFields: { tools: [{ type:
-     "web_search_20250305", ... }] }` gets rejected with a `ValidationException` whose
+"web_search_20250305", ... }] }` gets rejected with a `ValidationException` whose
      error message enumerates every tool type Bedrock's hosted Claude models actually
-     accept, and none of them are a `web_search` variant). AWS did announce a *separate*
+     accept, and none of them are a `web_search` variant). AWS did announce a _separate_
      product, **Web Search on Amazon Bedrock AgentCore** (2026-06-17), which does do
      this — but as an MCP connector through AgentCore Gateway, a different service
      surface that would mean standing up a Gateway resource and restructuring this
@@ -75,7 +75,7 @@ Either way, the mechanism itself:
    Claude Haiku then classifies what kind of org the domain looks like (veterinary clinic,
    university/research, etc.) and its reasoning references whichever evidence was actually
    available. This is still **assistive only, never a gate** — even grounded in real
-   evidence, an LLM's read of a homepage and some search snippets can't *prove* an
+   evidence, an LLM's read of a homepage and some search snippets can't _prove_ an
    organization is real or that the applicant works there; a human reviewer makes the actual
    call. If Bedrock or either evidence source is unavailable, verification proceeds without
    that signal rather than blocking.
@@ -83,6 +83,7 @@ Either way, the mechanism itself:
    details" form for the account before Anthropic models on Bedrock will actually respond —
    until that's done, `bedrock:InvokeModel` calls fail and classification is silently
    skipped (the gate above still works fine without it).
+
 3. **Proof of ownership**: a 6-digit code (SHA-256 hashed at rest, 15-minute expiry) is
    emailed via SES to the claimed address. Confirming it moves status to
    `awaiting_review` — proves the person controls the inbox, but doesn't yet grant anything.
@@ -108,7 +109,7 @@ automatable. See `docs/infra.md`.
 
 The session JWT's `verifiedContributor` claim is set once at sign-in and was never
 reissued when the quiz was passed or a professional verification approved — the latter
-can even happen from a *different* browser session (the reviewer's), so there was no way
+can even happen from a _different_ browser session (the reviewer's), so there was no way
 to refresh the approved user's own cookie at that moment anyway. `VerifiedGuard` and
 `GET /auth/me` now re-check the live DB record instead of trusting the JWT's cached claim
 (`UsersService.getByProviderAccount` on every guarded request). Costs an extra DynamoDB
@@ -124,7 +125,7 @@ in, and a revoked/rejected user's stale token would still pass the old guard.
 - `GET /contributions/pending` and `GET /verification/professional/pending` are both
   gated on `verifiedContributor` only, with no separate admin role. Add an allowlist
   before opening contributions up publicly.
-- Session is a long-lived (30-day) JWT in an httpOnly cookie. The *contributor gate* is now
+- Session is a long-lived (30-day) JWT in an httpOnly cookie. The _contributor gate_ is now
   live-checked (see above), but identity itself still can't be revoked before the token
   expires — rotating `JWT_SECRET` invalidates all sessions if you need a hard reset.
 - Org-email ownership proves someone works there, not that they're specifically a vet or
@@ -149,6 +150,6 @@ registered with each provider.
    exists) to pick it up.
 
 Note that `/auth/email/request`'s rate limit (`UsersService.canRequestNewCode`) is 1
-request/minute *per email address*, not global, so it doesn't by itself cap total daily
+request/minute _per email address_, not global, so it doesn't by itself cap total daily
 search volume — worth knowing if you ever see unexpected Brave billing. Leaving the env var
 unset just skips this evidence signal entirely; nothing else in the flow depends on it.

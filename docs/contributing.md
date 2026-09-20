@@ -94,6 +94,7 @@ mycota's `.cursor/rules/release-on-merge.mdc`.
    not auto-updating, so re-run this whenever you want the newest release. To track the
    rolling prerelease instead, run `pnpm add @bubltec/mycota-x@next` for the specific
    packages you need.
+
 4. **Validate**: `pnpm turbo run typecheck build test`.
 5. **Commit the result** like any other dependency bump — it's just a `package.json`/
    `pnpm-lock.yaml` diff, no special submodule-pointer ceremony.
@@ -149,12 +150,12 @@ a Playwright test from a plain-English description rather than writing one by ha
 - TypeScript everywhere, `workspace:*` for internal package references.
 - Shared types (`Thing`, `PetType`, etc.) live in `packages/shared-types` — add there first
   if a change touches both `apps/bff` and `apps/web`.
-- No inline comments beyond a line or two, and only where the *why* isn't obvious from the
+- No inline comments beyond a line or two, and only where the _why_ isn't obvious from the
   code. See the `adding-*` rules in `.cursor/rules/` for guided patterns when adding a new
   thing type, API endpoint, or infra resource.
 - **Exact versions.** Every dependency is pinned. `saveExact` is set in `pnpm-workspace.yaml`
   (and mirrored in `.npmrc`; pnpm 11 ignores `.npmrc` for this), so `pnpm add x` writes `1.2.3`.
-  Never hand-write `^` ranges. When converting ranges, pin to the *installed* version
+  Never hand-write `^` ranges. When converting ranges, pin to the _installed_ version
   (`pnpm ls -r --depth 0 --json`), not by stripping the caret, which can silently downgrade.
 - **Request bodies are strict.** Unknown fields are a 400 (`forbidNonWhitelisted`), so a new
   field must be added to the DTO in the same change that sends it.

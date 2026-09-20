@@ -36,12 +36,12 @@ is the fallback for hotfixes or debugging a broken pipeline).
    `https://dev.badthingsforpets.com`, the exact invocation [docs/e2e-testing.md](./e2e-testing.md)
    already documented running by hand. A failure here stops the pipeline; prod is untouched.
 6. **`prod-diff`** — computes `cdk diff BtfpProd/*` and posts it to the job's summary. Runs
-   automatically (not gated), specifically so the diff is visible *before* anyone is asked to
+   automatically (not gated), specifically so the diff is visible _before_ anyone is asked to
    approve the next job — a diff computed inside the gated job itself would only appear after
    the deploy already happened, which defeats the point.
 7. **`deploy-prod`** — gated by GitHub's `production` Environment protection rule: this job
    does not start until a required reviewer clicks approve in the Actions UI. Once approved:
-   downloads the *same* build artifacts from step 3 (not rebuilt), `cdk deploy BtfpProd/*`, then
+   downloads the _same_ build artifacts from step 3 (not rebuilt), `cdk deploy BtfpProd/*`, then
    reseeds the two committed content datasets (`data/seed/source/dog-breeds.json`,
    `product-activity-hazards.json`) straight into `btfp-prod-content` — see
    [data-sourcing.md](./data-sourcing.md#seeding-prod-in-ci) for what this does and doesn't
@@ -80,7 +80,7 @@ not enforced by `ci.yml` — easy to tighten into a required check later if nami
 5. Once `e2e` and `prod-diff` are green, `deploy-prod` shows **Waiting** in the Actions UI — this
    is the approval gate, not a hang or a failure. Open the run, click into `deploy-prod`, hit
    **Review deployments**, read `prod-diff`'s summary (a real `cdk diff BtfpProd/*`, computed
-   *before* the gate so it's not blind), then **Approve and deploy**.
+   _before_ the gate so it's not blind), then **Approve and deploy**.
 6. `deploy-prod` finishes: same artifacts promoted, then prerender-against-live-prod-API, then
    one more `cdk deploy BtfpProd/Web` to sync the real per-route HTML. Spot-check the live site
    once it's done.
@@ -115,7 +115,7 @@ between `deploy-prod` and actually running — there's no equivalent gate in IAM
   EOF
   ```
   A team works too: `{"type": "Team", "id": <team-id>}`, from `gh api orgs/bubltec/teams/<slug>
-  --jq .id` — usually the better call once this is more than a couple of people, since it
+--jq .id` — usually the better call once this is more than a couple of people, since it
   doesn't need a re-PUT every time membership changes.
 - To remove someone, PUT the same way with them left out of the `reviewers` array.
 - To check who's currently a reviewer without changing anything:
@@ -150,7 +150,7 @@ No long-lived AWS credentials are stored in GitHub at all. Instead:
   `repo:bubltec@310348769/btfp@1301972078:ref:refs/heads/main` (for `deploy-dev`/`prod-diff`,
   which run as a plain push to `main`) or
   `repo:bubltec@310348769/btfp@1301972078:environment:production` (for `deploy-prod`
-  specifically — a job with `environment:` set gets an *environment-scoped* `sub`, not the
+  specifically — a job with `environment:` set gets an _environment-scoped_ `sub`, not the
   ref-based one, regardless of what ref triggered it). Both were confirmed empirically, not
   assumed from docs: a temporary debug step printed the real token each time, first showing the
   `@<id>`-suffixed org/repo form (GitHub's immutable IDs — safer than plain names too, since it
@@ -180,12 +180,12 @@ No long-lived AWS credentials are stored in GitHub at all. Instead:
 
 Not automatable from CDK — these are GitHub repo settings.
 
-1. **Secrets** (Settings → Secrets and variables → Actions → *Secrets*): `AWS_DEPLOY_ROLE_ARN`
+1. **Secrets** (Settings → Secrets and variables → Actions → _Secrets_): `AWS_DEPLOY_ROLE_ARN`
    (`arn:aws:iam::<account>:role/btfp-gha-deploy`, from `CiStack`'s `DeployRoleArn` output),
    `BTFP_DEV_BASIC_AUTH_USER`, `BTFP_DEV_BASIC_AUTH_PASSWORD`, `BTFP_DEV_JWT_SECRET`,
    `BTFP_PROD_JWT_SECRET`, `BTFP_BRAVE_SEARCH_API_KEY` — same real values already in the
    gitignored `infra/cdk/.env.deploy.local`.
-2. **Variables** (same page → *Variables*): `BTFP_HOSTED_ZONE_ID` — not secret, just not worth
+2. **Variables** (same page → _Variables_): `BTFP_HOSTED_ZONE_ID` — not secret, just not worth
    hardcoding.
 3. **`production` Environment** (Settings → Environments → New environment, name it
    `production`): add yourself as a required reviewer. This is the actual prod approval gate.
@@ -201,6 +201,7 @@ Not automatable from CDK — these are GitHub repo settings.
    required status, so the check is advisory. Requiring it is safe with the docs-only skip:
    the `check` job is skipped (a skipped job reports success) rather than the workflow being
    filtered out, so a docs-only PR is never stuck waiting on a status that never arrives.
+
 5. **(Pending)** Require an actual approving review before merge, not just the `check` status —
    passing CI was never meant to substitute for a human looking at the diff. Blocked on one
    thing: PRs need to be authored by an identity other than the reviewer's own, since GitHub

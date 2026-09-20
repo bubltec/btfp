@@ -51,15 +51,15 @@ AgentCore, authenticated by the Fargate task role.
 Baked into the Fargate task definition by `infra/cdk/lib/scraper-stack.ts`
 (no SSM secrets):
 
-| Env var | Default | Purpose |
-|---|---|---|
-| `AGENTCORE_GATEWAY_URL` | Gateway `GatewayUrl` | MCP endpoint for Web Search |
-| `AGENTCORE_MEMORY_ID` | Memory `MemoryId` | Long-term "already collected" store |
-| `TRENDS_GEO` | `US` | Trends geo |
-| `TRENDS_HOURS` | `24` | Trends window (4 / 24 / 48 / 168) |
-| `TRENDS_CATEGORY` | `13` | Pets and Animals |
-| `MAX_TOPICS_PER_RUN` | `8` | Cost cap per 6h run |
-| `MAX_SEARCH_RESULTS` | `5` | Hits per topic |
+| Env var                 | Default              | Purpose                             |
+| ----------------------- | -------------------- | ----------------------------------- |
+| `AGENTCORE_GATEWAY_URL` | Gateway `GatewayUrl` | MCP endpoint for Web Search         |
+| `AGENTCORE_MEMORY_ID`   | Memory `MemoryId`    | Long-term "already collected" store |
+| `TRENDS_GEO`            | `US`                 | Trends geo                          |
+| `TRENDS_HOURS`          | `24`                 | Trends window (4 / 24 / 48 / 168)   |
+| `TRENDS_CATEGORY`       | `13`                 | Pets and Animals                    |
+| `MAX_TOPICS_PER_RUN`    | `8`                  | Cost cap per 6h run                 |
+| `MAX_SEARCH_RESULTS`    | `5`                  | Hits per topic                      |
 
 Schedule is `events.Schedule.rate(...)` in `scraper-stack.ts`, currently
 every 6 hours.
@@ -74,7 +74,7 @@ stack does not crash-loop.
   processed. Delete this item to force that term to be researched again.
 - AgentCore Memory records under `/scraper/btfp-scraper` — semantic near-
   duplicates. These extract asynchronously after `CreateEvent`; the Dynamo
-  marker is what stops the *next* run immediately.
+  marker is what stops the _next_ run immediately.
 
 ## Manually triggering a run
 
