@@ -39,6 +39,25 @@ deploy gets done, just no longer the routine way changes ship.
 `BtfpDev` serves `dev.badthingsforpets.com`; `BtfpProd` serves `badthingsforpets.com` and
 `www.badthingsforpets.com`.
 
+### One-time: migrating a function onto SAM's `AutoPublishAlias`
+
+If a Lambda function previously got its `live` alias from a CDK-managed `fn.addAlias('live')`
+(pre-SAM canary setup), SAM's `AutoPublishAlias` cannot create its own `live` alias while
+that one still exists — CloudFormation has no built-in way to order "delete the old alias"
+before "create the new one" without an ordering dependency that cycles back on itself (the
+migration needs the function's name via `Ref`, so it always depends on the function; adding
+the reverse dependency propagates through SAM to the function's generated `Version` and
+`Alias` too, forming a direct cycle). Delete the stale alias by hand, once, before deploying:
+
+```bash
+aws lambda delete-alias --function-name <physical-function-name> --name live
+```
+
+Safe to run even if the alias doesn't exist (returns `ResourceNotFoundException`). Do this
+right before the deploy that introduces `publishLiveAlias` for that function — the alias is
+briefly gone until SAM recreates it during that same deploy. Fine for dev (Basic-Auth-walled);
+for prod, do it immediately before approving `deploy-prod` to minimize the gap.
+
 ## Budget (rough, at low/unknown traffic)
 
 | Item | Cost |

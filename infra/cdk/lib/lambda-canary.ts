@@ -1,59 +1,9 @@
 import * as cdk from 'aws-cdk-lib';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
-import {
-  AwsCustomResource,
-  AwsCustomResourcePolicy,
-  PhysicalResourceId,
-} from 'aws-cdk-lib/custom-resources';
-import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as sam from 'aws-cdk-lib/aws-sam';
 
 const CANARY_PERIOD = cdk.Duration.minutes(1);
-
-/**
- * CDK `addAlias('live')` → SAM `AutoPublishAlias`: the old alias can linger in
- * Lambda while SAM tries to create the same name. One-time DeleteAlias on
- * create; scoped to the stack (not the function construct) so API Gateway
- * integrations do not form a CFN dependency cycle with the function.
- */
-function deleteOrphanLiveAliasBeforeSam(fn: lambda.Function): void {
-  const stack = cdk.Stack.of(fn);
-  new AwsCustomResource(stack, `${fn.node.id}SamLiveAliasMigration`, {
-    onCreate: {
-      service: '@aws-sdk/client-lambda',
-      action: 'DeleteAliasCommand',
-      parameters: {
-        FunctionName: fn.functionName,
-        Name: 'live',
-      },
-      physicalResourceId: PhysicalResourceId.of(
-        `${stack.stackName}-${fn.node.id}-sam-live-alias-migration`,
-      ),
-      ignoreErrorCodesMatching: 'ResourceNotFoundException|NotFound',
-    },
-    onUpdate: {
-      service: '@aws-sdk/client-lambda',
-      action: 'GetFunctionCommand',
-      parameters: { FunctionName: fn.functionName },
-      physicalResourceId: PhysicalResourceId.of(
-        `${stack.stackName}-${fn.node.id}-sam-live-alias-migration`,
-      ),
-    },
-    policy: AwsCustomResourcePolicy.fromStatements([
-      new iam.PolicyStatement({
-        actions: ['lambda:DeleteAlias', 'lambda:GetFunction'],
-        resources: [
-          stack.formatArn({
-            service: 'lambda',
-            resource: 'function',
-            resourceName: '*',
-          }),
-        ],
-      }),
-    ]),
-  });
-}
 
 /**
  * Turns a CDK `Function` into an `AWS::Serverless::Function` so we get SAM's
@@ -64,6 +14,18 @@ function deleteOrphanLiveAliasBeforeSam(fn: lambda.Function): void {
  * `type` starts the traffic shift; `alarms` (if any) only roll it back.
  *
  * Traffic must go to the returned `:live` alias, not `$LATEST`.
+ *
+ * One-time migration note: a function that previously used a CDK-managed
+ * `fn.addAlias('live')` (pre-SAM) has an existing `live` alias outside this
+ * stack's control. SAM's `AutoPublishAlias` cannot create it while it
+ * exists — CloudFormation has no reliable way to order that deletion
+ * before this creation without a Ref-based custom resource depending on
+ * the function, which cycles back through SAM's DependsOn propagation to
+ * every resource generated from it (Version, Alias). Delete it manually,
+ * once, before deploying this change:
+ *   aws lambda delete-alias --function-name <physical-function-name> --name live
+ * Safe to run against a function with no alias (returns ResourceNotFoundException).
+ * See docs/infra.md.
  */
 export function publishLiveAlias(
   fn: lambda.Function,
@@ -78,8 +40,6 @@ export function publishLiveAlias(
   fn.addEnvironment('BTFP_INVOKE_ALIAS', 'live');
 
   fn.stack.addTransform('AWS::Serverless-2016-10-31');
-
-  deleteOrphanLiveAliasBeforeSam(fn);
 
   const cfn = fn.node.defaultChild as lambda.CfnFunction;
   cfn.addOverride('Type', 'AWS::Serverless::Function');
