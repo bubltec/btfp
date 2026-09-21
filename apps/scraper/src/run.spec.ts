@@ -155,6 +155,36 @@ describe('run', () => {
     expect(searched.some((q) => q.startsWith('grapes'))).toBe(true);
   });
 
+  it('caps research at N new topics, not N topics including ones already seen', async () => {
+    const db = mockAws(DynamoDBDocumentClient);
+    db.on(GetCommand).callsFake((input: { Key: { PK: string } }) =>
+      ['SCRAPERTREND#a', 'SCRAPERTREND#b'].includes(input.Key.PK)
+        ? { Item: { PK: input.Key.PK } }
+        : {},
+    );
+    db.on(ScanCommand).resolves({ Items: [] });
+    db.on(QueryCommand).resolves({ Items: [] });
+    db.on(PutCommand).resolves({});
+    const searched = new Set<string>();
+    const search = {
+      search: async (q: string) => {
+        searched.add(q.split(' toxic')[0]!.split(' pet')[0]!);
+        return [{ title: 't', url: `https://example.com/${q}`, text: 'x' }];
+      },
+    };
+    await run(
+      { ...config, maxTopicsPerRun: 2 },
+      client(),
+      deps({
+        search,
+        trends: { listTrendingTopics: async () => [] },
+        discover: async () => ['a', 'b', 'c', 'd', 'e'].map((term) => ({ term })),
+      }),
+    );
+    // a and b are already seen, so the two researched are c and d.
+    expect([...searched].sort()).toEqual(['c', 'd']);
+  });
+
   it('does not file a low-confidence report', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(GetCommand).resolves({});

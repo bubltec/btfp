@@ -79,14 +79,17 @@ export async function run(
     const key = topic.term.trim().toLowerCase();
     if (!unique.has(key)) unique.set(key, topic);
   }
-  const topics = [...unique.values()].slice(0, config.maxTopicsPerRun);
+  const topics = [...unique.values()];
   console.log(
-    `Topics: ${trending.length} trending → ${relevant.length} relevant, ${discovered.length} from search; researching up to ${config.maxTopicsPerRun}, ${topics.length} after de-dupe.`,
+    `Topics: ${trending.length} trending → ${relevant.length} relevant, ${discovered.length} from search; ${topics.length} unique; researching up to ${config.maxTopicsPerRun} new ones.`,
   );
 
   const pending: typeof topics = [];
   let skipped = 0;
   for (const topic of topics) {
+    // Cap after filtering out seen topics. Capping first meant the same first N discovered
+    // topics were skipped every run and nothing new was ever researched.
+    if (pending.length >= config.maxTopicsPerRun) break;
     if (
       (await isTopicProcessed(db, topic.term)) ||
       (await deps.memory.alreadyCollected(topic.term))
