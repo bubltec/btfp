@@ -5,11 +5,15 @@ export interface Taxonomy {
   petTypeIds: string[];
 }
 
+export type Confidence = 'high' | 'medium' | 'low';
+
 export interface ExtractionResult {
   isPetHazardReport: boolean;
   thingName?: string;
   thingTypeId?: string;
-  petTypeId?: string;
-  severity?: Severity;
+  /** One entry per pet type the sources actually discuss; never guessed. */
+  petTypes?: { petTypeId: string; severity: Severity }[];
   summary?: string;
+  /** How well independent sources agree that this is a hazard. */
+  confidence?: Confidence;
 }

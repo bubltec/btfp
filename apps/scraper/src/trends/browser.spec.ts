@@ -23,4 +23,20 @@ describe('GoogleTrendsBrowserSource', () => {
       expect.objectContaining({ waitUntil: 'domcontentloaded' }),
     );
   });
+
+  it('throws rather than researching page chrome when no trend rows load', async () => {
+    const source = new GoogleTrendsBrowserSource({
+      region: 'us-east-1',
+      geo: 'US',
+      hours: 24,
+      category: 13,
+      withPage: async (_opts, fn) =>
+        fn({
+          goto: vi.fn(),
+          waitForFunction: async () => undefined,
+          locator: () => ({ allInnerTexts: async () => ['Terms', 'Privacy', 'Sign in'] }),
+        } as never),
+    });
+    await expect(source.listTrendingTopics()).rejects.toThrow(/no trend rows/);
+  });
 });

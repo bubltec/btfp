@@ -46,10 +46,12 @@ function deps(overrides: Partial<ScraperDeps> = {}): ScraperDeps {
       isPetHazardReport: true,
       thingName: 'Xylitol',
       thingTypeId: 'food',
-      petTypeId: 'dog',
-      severity: 'severe',
+      petTypes: [{ petTypeId: 'dog', severity: 'severe' }],
+      confidence: 'high',
       summary: 'Sugar-free gum sweetener.',
     }),
+    triage: async (_client, _model, terms) => terms,
+    discover: async () => [],
     ...overrides,
   };
 }
@@ -82,7 +84,11 @@ describe('run', () => {
       client(),
       deps({
         memory: { alreadyCollected: async () => false, remember },
-        classify: async () => ({ isPetHazardReport: true, summary: 'Something vague.' }),
+        classify: async () => ({
+          isPetHazardReport: true,
+          confidence: 'high',
+          summary: 'Something vague.',
+        }),
       }),
     );
 
@@ -99,6 +105,83 @@ describe('run', () => {
       true,
     );
     expect(remember).toHaveBeenCalledWith('xylitol gum', expect.stringContaining('not filed'));
+  });
+
+  it('researches only triaged trends plus search-discovered hazards, and survives a Trends outage', async () => {
+    const db = mockAws(DynamoDBDocumentClient);
+    db.on(GetCommand).resolves({});
+    db.on(ScanCommand).resolves({ Items: [] });
+    db.on(QueryCommand).resolves({ Items: [] });
+    db.on(PutCommand).resolves({});
+    const searched: string[] = [];
+    const search = {
+      search: async (q: string) => {
+        searched.push(q);
+        return [{ title: 't', url: `https://example.com/${searched.length}`, text: 'x' }];
+      },
+    };
+
+    await run(
+      config,
+      client(),
+      deps({
+        search,
+        trends: {
+          listTrendingTopics: async () => [{ term: 'nfl scores' }, { term: 'sago palm' }],
+        },
+        triage: async () => ['sago palm'],
+        discover: async () => [{ term: 'Xylitol' }, { term: 'SAGO PALM' }],
+      }),
+    );
+    // sago palm (once, de-duped case-insensitively) and xylitol; never "nfl scores".
+    expect(searched.some((q) => q.includes('nfl scores'))).toBe(false);
+    expect(searched.filter((q) => q.startsWith('sago palm')).length).toBeGreaterThan(0);
+    expect(searched.some((q) => q.toLowerCase().startsWith('xylitol'))).toBe(true);
+
+    searched.length = 0;
+    await run(
+      { ...config, maxTopicsPerRun: 8 },
+      client(),
+      deps({
+        search,
+        trends: {
+          listTrendingTopics: async () => {
+            throw new Error('Google Trends returned no trend rows');
+          },
+        },
+        discover: async () => [{ term: 'grapes' }],
+      }),
+    );
+    expect(searched.some((q) => q.startsWith('grapes'))).toBe(true);
+  });
+
+  it('does not file a low-confidence report', async () => {
+    const db = mockAws(DynamoDBDocumentClient);
+    db.on(GetCommand).resolves({});
+    db.on(ScanCommand).resolves({ Items: [] });
+    db.on(QueryCommand).resolves({ Items: [] });
+    db.on(PutCommand).resolves({});
+    await run(
+      config,
+      client(),
+      deps({
+        classify: async () => ({
+          isPetHazardReport: true,
+          thingName: 'Xylitol',
+          thingTypeId: 'food',
+          confidence: 'low',
+        }),
+      }),
+    );
+    const items = db
+      .commandCalls(PutCommand)
+      .map(
+        (call: { args: [{ input: { Item?: Record<string, unknown> } }] }) =>
+          call.args[0].input.Item ?? {},
+      );
+    expect(
+      items.some((i: Record<string, unknown>) => String(i.SK ?? '').startsWith('CONTRIB#')),
+    ).toBe(false);
   });
 
   it('writes a pending contribution for a classified hazard and marks the topic', async () => {

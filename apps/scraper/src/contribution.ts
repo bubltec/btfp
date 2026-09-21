@@ -21,11 +21,15 @@ import type { CatalogThing } from './taxonomy.js';
  * optional chain, which degrades gracefully for an unresolvable id. */
 export const SCRAPER_CONTRIBUTOR_ID = 'system:agentcore-scraper';
 
-/** A moderator can only act on a candidate that has both a name and a type. */
+/** Worth a moderator's time: a name and a type, and sources that agree well enough to trust. */
 export function isFileableExtraction(
   extraction: ExtractionResult,
 ): extraction is ExtractionResult & { thingName: string; thingTypeId: string } {
-  return Boolean(extraction.thingName?.trim() && extraction.thingTypeId?.trim());
+  return Boolean(
+    extraction.thingName?.trim() &&
+    extraction.thingTypeId?.trim() &&
+    extraction.confidence !== 'low',
+  );
 }
 
 async function listPending(db: DynamoDBDocumentClient): Promise<Contribution[]> {
@@ -64,10 +68,12 @@ export async function writeContribution(
   const payload: Contribution['payload'] = {
     name: extraction.thingName,
     thingTypeId: extraction.thingTypeId,
-    petTypes: extraction.petTypeId
-      ? [{ petTypeId: extraction.petTypeId, severity: extraction.severity ?? 'unknown' }]
-      : [],
-    details: { summary: extraction.summary, trendTerm: document.topic },
+    petTypes: extraction.petTypes ?? [],
+    details: {
+      summary: extraction.summary,
+      trendTerm: document.topic,
+      ...(extraction.confidence ? { confidence: extraction.confidence } : {}),
+    },
     source: document.source,
     sourceUrl: document.sourceUrl,
   };

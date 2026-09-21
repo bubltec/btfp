@@ -19,8 +19,8 @@ const extraction: ExtractionResult = {
   isPetHazardReport: true,
   thingName: 'Sock',
   thingTypeId: 'unknown',
-  petTypeId: 'dog',
-  severity: 'moderate',
+  petTypes: [{ petTypeId: 'dog', severity: 'moderate' }],
+  confidence: 'high',
   summary: 'Dog ate a sock, vomited it up fine.',
 };
 
@@ -65,7 +65,7 @@ describe('writeContribution', () => {
     expect(contribution.payload.details).toMatchObject({ trendTerm: 'sock' });
   });
 
-  it('defaults to an empty petTypes array when the extraction has no petTypeId', async () => {
+  it('defaults to an empty petTypes array when the extraction has no petTypes', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
     db.on(QueryCommand).resolves({ Items: [] });
@@ -73,7 +73,7 @@ describe('writeContribution', () => {
     const contribution = await writeContribution(
       DynamoDBDocumentClient.from(new DynamoDBClient({})),
       document,
-      { ...extraction, petTypeId: undefined },
+      { ...extraction, petTypes: undefined },
     );
 
     expect(contribution.payload.petTypes).toEqual([]);
@@ -111,6 +111,8 @@ describe('isFileableExtraction / nameless candidates', () => {
     expect(isFileableExtraction({ ...extraction, thingName: undefined })).toBe(false);
     expect(isFileableExtraction({ ...extraction, thingName: '  ' })).toBe(false);
     expect(isFileableExtraction({ ...extraction, thingTypeId: undefined })).toBe(false);
+    expect(isFileableExtraction({ ...extraction, confidence: 'low' })).toBe(false);
+    expect(isFileableExtraction({ ...extraction, confidence: 'medium' })).toBe(true);
   });
 
   it('refuses to write a nameless contribution', async () => {

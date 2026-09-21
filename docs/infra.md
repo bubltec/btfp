@@ -78,21 +78,21 @@ transform. The behavior is covered by `infra/cdk/lib/lambda-canary.spec.ts`.
 
 ## Budget (rough, at low/unknown traffic)
 
-| Item                                                               | Cost                                                               |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| Route53 hosted zone                                                | ~$0.50/mo                                                          |
-| ACM certificate                                                    | free                                                               |
-| Lambda + API Gateway                                               | ~free under ~1M requests/mo                                        |
-| DynamoDB (on-demand)                                               | pennies at this scale                                              |
-| CloudFront                                                         | pennies at this scale                                              |
-| WAF (2 rule groups)                                                | ~$6-8/mo                                                           |
-| SES                                                                | ~free — $0.10/1,000 emails, and this only sends verification codes |
-| Bedrock (Claude Haiku, domain classification + scraper extraction) | ~free — a few cents per 1,000 calls                                |
-| AgentCore Web Search (scraper, ≤8 topics/run × 4 runs/day)         | ~$1-2/mo per env at $7/1,000 queries                               |
-| AgentCore Browser + Memory (scraper)                               | pennies at this cadence                                            |
-| Brave Search (optional, org-legitimacy signal)                     | free tier covers this app's volume                                 |
-| ECS Fargate (scraper, ~5min/run, every 6h)                         | ~$1-2/mo per env                                                   |
-| VPC (scraper, public-only, no NAT)                                 | free                                                               |
+| Item                                                                      | Cost                                                                    |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Route53 hosted zone                                                       | ~$0.50/mo                                                               |
+| ACM certificate                                                           | free                                                                    |
+| Lambda + API Gateway                                                      | ~free under ~1M requests/mo                                             |
+| DynamoDB (on-demand)                                                      | pennies at this scale                                                   |
+| CloudFront                                                                | pennies at this scale                                                   |
+| WAF (2 rule groups)                                                       | ~$6-8/mo                                                                |
+| SES                                                                       | ~free — $0.10/1,000 emails, and this only sends verification codes      |
+| Bedrock (Haiku for domain classification; Sonnet for scraper research)    | ~free for Haiku; scraper Sonnet is cents per run                        |
+| AgentCore Web Search (scraper: 5 discovery + 3 per new topic, 4 runs/day) | ~$5-25/mo per env at $7/1,000 queries (already-seen topics are skipped) |
+| AgentCore Browser + Memory (scraper)                                      | pennies at this cadence                                                 |
+| Brave Search (optional, org-legitimacy signal)                            | free tier covers this app's volume                                      |
+| ECS Fargate (scraper, ~5min/run, every 6h)                                | ~$1-2/mo per env                                                        |
+| VPC (scraper, public-only, no NAT)                                        | free                                                                    |
 
 Dev + prod together should land well under $50/mo unless traffic spikes hard. The two
 biggest levers if it doesn't: drop WAF's rate-limit rule, or merge dev+prod's WAF into a
@@ -218,6 +218,7 @@ hand.
     logs a skip line and no-ops.
 
 The Bedrock inference profile id (`BEDROCK_INFERENCE_PROFILE_ID` in `config.ts`) is
-hardcoded to Claude Haiku 4.5's current profile — Anthropic model ids on Bedrock are
+hardcoded to Claude Haiku 4.5's current profile (the scraper has its own,
+`SCRAPER_BEDROCK_INFERENCE_PROFILE_ID`, on Sonnet 4.6) — Anthropic model ids on Bedrock are
 versioned and do change over time; if `bedrock:InvokeModel` starts failing with a
 model-not-found error, check `aws bedrock list-inference-profiles` for the current id.

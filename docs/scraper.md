@@ -15,16 +15,22 @@ AgentCore, authenticated by the Fargate task role.
 
 ## How it works
 
-1. **Topic discovery** — AgentCore Browser (managed Chrome) + Playwright CDP
-   opens Google Trends **Trending Now**, filtered to Pets and Animals:
-
-   `https://trends.google.com/trending?geo=US&hours=24&category=13`
-
-   (`category=13` is Pets and Animals.) That page is not covered by Trends'
-   `robots.txt` disallow (only `/explore` is). The official Google Trends API
-   is still a gated alpha and is **not** used; `TrendSource` in
-   `apps/scraper/src/trends/types.ts` is the slot to drop an API client into
-   later if that alpha opens up.
+1. **Topic discovery** — two sources, merged and de-duplicated:
+   - **Trending Now** — AgentCore Browser (managed Chrome) + Playwright CDP opens
+     `https://trends.google.com/trending?geo=US&hours=24` and reads the trend rows.
+     The page ignores `category=13` (it always shows all categories), and the
+     list is mostly sports and news, so every term goes through a **triage** step
+     (`extract/triage.ts`): the model gives a yes/no per topic on "could this
+     poison a dog or cat", and only the yeses continue. If the page yields no rows the
+     source **throws** (it used to fall back to scraping every link, which turned the
+     footer — "Terms", "Privacy", "Sign in" — into "trends"); the run logs the outage
+     and carries on with search discovery. `/explore` is disallowed by Trends'
+     `robots.txt` and is not used. The official Trends API is still a gated alpha;
+     `TrendSource` in `apps/scraper/src/trends/types.ts` is the slot for it.
+   - **Search discovery** (`discover/seed-search.ts`) — a fixed list of hazard-news
+     queries ("new toxic substance dogs veterinarians warn this week", …) run through
+     the web-search tool; the model lists the specific substances the results name.
+     This is the source that actually finds toxic items.
 
 2. **Skip already-collected topics** — two layers:
    - Exact-term DynamoDB marker (`PK: SCRAPERTREND#{normalized term}`).
@@ -32,19 +38,25 @@ AgentCore, authenticated by the Fargate task role.
      near-duplicate of something we already researched is not re-searched
      (and not re-billed at $7/1,000 Web Search queries).
 
-3. **Search** — AgentCore Gateway Web Search tool (`connectorId: web-search`).
-   Queries never leave AWS; no search-vendor key. Default query shape:
-   `{topic} toxic for dogs cats pets` (200-character cap).
+3. **Research** (`research.ts`) — AgentCore Gateway Web Search tool
+   (`connectorId: web-search`), three queries per topic (toxic to dogs, toxic to cats,
+   symptoms/treatment), merged and de-duplicated by URL (max 10 hits) so the
+   classifier sees independent sources. Queries never leave AWS; no search-vendor key.
 
-4. **Classify** — Bedrock (`us.anthropic.claude-haiku-4-5-20251001-v1:0`,
-   same forced-tool-use pattern as `BedrockClassifierService`) extracts
-   `{ isPetHazardReport, thingName, thingTypeId, petTypeId, severity, summary }`.
-   `thingTypeId`/`petTypeId` are constrained to whatever actually exists in
-   the Content table at run time (a live `Scan`).
+4. **Classify** — Bedrock (`us.anthropic.claude-sonnet-4-6`; `SCRAPER_BEDROCK_INFERENCE_PROFILE_ID`
+   in `infra/cdk/lib/config.ts`, deliberately stronger than the BFF's Haiku), forced tool
+   use, temperature 0, with a system prompt that requires: only facts in the sources,
+   one specific named hazard (never a list or category), a severity per pet type actually
+   discussed, and a `confidence` of high/medium/low (two independent authoritative
+   sources = high). Output: `{ isPetHazardReport, thingName, thingTypeId, petTypes[],
+summary, confidence }`. `thingTypeId`/`petTypeId` are constrained to what exists in the
+   Content table (a live `Scan`). The model sees the topic and the numbered search
+   results — nothing else.
 
-5. **Queue** — a matching name attaches to an existing Thing; otherwise the
-   candidate proposes a new one. Then the topic is marked processed and
-   written into AgentCore Memory.
+5. **Queue** — only reports with a name, a type and confidence above `low` are filed
+   (`isFileableExtraction`); a matching name attaches to an existing Thing, otherwise the
+   candidate proposes a new one. `confidence` is stored in `details` for the moderator.
+   Then the topic is marked processed and written into AgentCore Memory.
 
 ## Configuration
 

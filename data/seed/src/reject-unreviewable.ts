@@ -4,12 +4,40 @@ import { isReviewableContribution, type Contribution } from '@btfp/shared-types'
 type Row = Contribution & { PK: string; SK: string };
 
 export const CLEANUP_REVIEWER_ID = 'system:cleanup';
-export const CLEANUP_NOTE = 'Auto-rejected: no name or type, so it could not be reviewed.';
+export const CLEANUP_NOTE =
+  'Auto-rejected: no name or type, or scraped from Google Trends page chrome.';
 
-/** Pending rows a moderator can never act on (no payload, or no name/type). */
+/**
+ * Google Trends page chrome the scraper once mistook for trending topics (its link fallback
+ * scraped the footer). Anything researched from one of these is noise, even when the search
+ * happened to turn up a plausible-looking hazard.
+ */
+const PAGE_CHROME_TERMS = new Set([
+  'terms',
+  'send feedback',
+  'privacy',
+  'about',
+  'sign in',
+  'help',
+]);
+
+function fromPageChrome(row: Row): boolean {
+  const term = (row.payload?.details as Record<string, unknown> | undefined)?.trendTerm;
+  return (
+    row.contributorId === 'system:agentcore-scraper' &&
+    typeof term === 'string' &&
+    PAGE_CHROME_TERMS.has(term.trim().toLowerCase())
+  );
+}
+
+/** Pending rows a moderator can never usefully act on: no payload, no name/type, or scraped from page chrome. */
 export function selectUnreviewable(rows: Row[]): Row[] {
   return rows.filter(
-    (row) => !row.payload || typeof row.payload !== 'object' || !isReviewableContribution(row),
+    (row) =>
+      !row.payload ||
+      typeof row.payload !== 'object' ||
+      !isReviewableContribution(row) ||
+      fromPageChrome(row),
   );
 }
 
