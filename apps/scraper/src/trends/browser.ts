@@ -25,10 +25,12 @@ export class GoogleTrendsBrowserSource implements TrendSource {
         .catch(() => undefined);
       const rowTexts = await page.locator('table tbody tr, [role="row"]').allInnerTexts();
       const parsed = parseTrendRows(rowTexts);
-      if (parsed.length > 0) return parsed;
-
-      const linkTexts = await page.locator('a').allInnerTexts();
-      return parseTrendRows(linkTexts);
+      // No `<a>` fallback: it returns the page footer ("Terms", "Privacy", "Sign in"),
+      // which then gets researched as if it were a trend. Fail loudly instead.
+      if (parsed.length === 0) {
+        throw new Error(`Google Trends returned no trend rows (${rowTexts.length} rows seen)`);
+      }
+      return parsed;
     });
     return terms.map((term) => ({ term }));
   }

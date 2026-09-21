@@ -31,7 +31,7 @@ describe('classifyDocument', () => {
               toolUse: {
                 toolUseId: 't1',
                 name: 'extract_pet_hazard',
-                input: { isPetHazardReport: true, thingName: 'xylitol', severity: 'severe' },
+                input: { isPetHazardReport: true, thingName: 'xylitol', confidence: 'high' },
               },
             },
           ],
@@ -42,7 +42,7 @@ describe('classifyDocument', () => {
     const client = new BedrockRuntimeClient({});
     const result = await classifyDocument(client, 'model-id', document, taxonomy);
 
-    expect(result).toEqual({ isPetHazardReport: true, thingName: 'xylitol', severity: 'severe' });
+    expect(result).toEqual({ isPetHazardReport: true, thingName: 'xylitol', confidence: 'high' });
 
     const call = bedrock.commandCalls(ConverseCommand)[0];
     const sent = call?.args[0].input;
@@ -51,7 +51,13 @@ describe('classifyDocument', () => {
     const tool = sent?.toolConfig?.tools?.[0]?.toolSpec;
     const schema = tool?.inputSchema?.json as { properties: Record<string, { enum?: string[] }> };
     expect(schema.properties.thingTypeId?.enum).toEqual(taxonomy.thingTypeIds);
-    expect(schema.properties.petTypeId?.enum).toEqual(taxonomy.petTypeIds);
+    const petItem = (
+      schema.properties.petTypes as unknown as {
+        items: { properties: { petTypeId: { enum: string[] } } };
+      }
+    ).items;
+    expect(petItem.properties.petTypeId.enum).toEqual(taxonomy.petTypeIds);
+    expect(sent?.system?.[0]?.text).toContain('Never fill gaps from memory');
   });
 
   it('returns null when the response has no tool-use block', async () => {

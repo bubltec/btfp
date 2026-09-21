@@ -21,6 +21,17 @@ import type { CatalogThing } from './taxonomy.js';
  * optional chain, which degrades gracefully for an unresolvable id. */
 export const SCRAPER_CONTRIBUTOR_ID = 'system:agentcore-scraper';
 
+/** Worth a moderator's time: a name and a type, and sources that agree well enough to trust. */
+export function isFileableExtraction(
+  extraction: ExtractionResult,
+): extraction is ExtractionResult & { thingName: string; thingTypeId: string } {
+  return Boolean(
+    extraction.thingName?.trim() &&
+    extraction.thingTypeId?.trim() &&
+    extraction.confidence !== 'low',
+  );
+}
+
 async function listPending(db: DynamoDBDocumentClient): Promise<Contribution[]> {
   const items: Contribution[] = [];
   let lastKey: Record<string, unknown> | undefined;
@@ -51,13 +62,18 @@ export async function writeContribution(
   extraction: ExtractionResult,
   catalog: CatalogThing[] = [],
 ): Promise<Contribution> {
+  if (!isFileableExtraction(extraction)) {
+    throw new Error('Refusing to file a contribution without a thing name and type');
+  }
   const payload: Contribution['payload'] = {
     name: extraction.thingName,
     thingTypeId: extraction.thingTypeId,
-    petTypes: extraction.petTypeId
-      ? [{ petTypeId: extraction.petTypeId, severity: extraction.severity ?? 'unknown' }]
-      : [],
-    details: { summary: extraction.summary, trendTerm: document.topic },
+    petTypes: extraction.petTypes ?? [],
+    details: {
+      summary: extraction.summary,
+      trendTerm: document.topic,
+      ...(extraction.confidence ? { confidence: extraction.confidence } : {}),
+    },
     source: document.source,
     sourceUrl: document.sourceUrl,
   };

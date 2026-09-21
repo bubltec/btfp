@@ -31,6 +31,10 @@ export const PROD_JWT_SECRET = process.env.BTFP_PROD_JWT_SECRET ?? 'REPLACE_BEFO
 // Claude Haiku 4.5 needs the inference profile, not the bare model id — see docs/infra.md.
 export const BEDROCK_INFERENCE_PROFILE_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 
+// The scraper judges hazard claims from web snippets, so it uses a stronger model than the
+// BFF's classification calls.
+export const SCRAPER_BEDROCK_INFERENCE_PROFILE_ID = 'us.anthropic.claude-sonnet-4-6';
+
 // Optional: Brave Search API, used as an evidence signal for
 // professional-verification's org-legitimacy check (see
 // docs/verification-flow.md). Shared by dev + prod, same key. Left empty

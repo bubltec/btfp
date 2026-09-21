@@ -29,7 +29,7 @@
 ## The prerendering problem
 
 This is a client-side-only React SPA — without the fix below, every route
-serves the *same* static HTML shell (generic title, generic description, an
+serves the _same_ static HTML shell (generic title, generic description, an
 empty `<div id="root">`), and the real content only appears after JavaScript
 executes and fetches data. Plenty of crawlers, including some of the AI ones
 `robots.txt` explicitly welcomes, fetch raw HTML without executing JS —
@@ -68,7 +68,7 @@ prerender for.
 ### How requests find the prerendered files
 
 `web-stack.ts`'s `SpaFallbackFunction` (a CloudFront Function on the
-default/S3 behavior only) appends `/index.html` to the *current* request
+default/S3 behavior only) appends `/index.html` to the _current_ request
 path for any extensionless URL, rather than always rewriting to a single
 generic `/index.html`. So `/things/<id>/<slug>` resolves to
 `things/<id>/<slug>/index.html` in S3 — the real prerendered file, if one

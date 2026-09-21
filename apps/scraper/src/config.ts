@@ -17,7 +17,8 @@ export interface ScraperConfig {
   maxSearchResults: number;
 }
 
-const DEFAULT_MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+// Sonnet, not Haiku: judging hazard claims from search snippets is where a weak model hurts.
+const DEFAULT_MODEL_ID = 'us.anthropic.claude-sonnet-4-6';
 
 /**
  * All config is env vars baked into the Fargate task definition. No Reddit

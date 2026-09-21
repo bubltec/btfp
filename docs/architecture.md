@@ -50,6 +50,13 @@ WAF at the CloudFront layer covers both.
 3. `GET /api/contributions/pending` clusters leftover duplicates of the same identity
    into one card. `POST /api/contributions/:thingId/:sk/approve` folds sibling pending
    payloads into the live `Thing` (`mergeThings`) and marks those rows approved.
+   Rows with no name or type are left out of the queue (they can't be approved), and
+   each card carries a `preview` — the field-level diff approval would produce, built by
+   the same `applyContributionToThing` that `approve` uses, so the two can't drift.
+   `POST /api/contributions/:thingId/:sk/reject` marks the whole card (folded siblings
+   included) `rejected` and drops it from the pending index. The scraper won't file a
+   candidate without a name and type; `pnpm --filter @btfp/seed reject:unreviewable`
+   (dry run unless `--apply`) rejects any such rows already queued.
    Dynamo access for the queue goes through `PendingContributionStore` (Dynamo adapter
    in the BFF; the scraper talks to the table directly but uses the same shared-types
    plan). There's no admin-role check yet — see the note in

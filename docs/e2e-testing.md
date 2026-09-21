@@ -100,10 +100,10 @@ Two AWS-native alternatives were considered and ruled out for this in favor of w
   in CI or locally, consistent with this repo's minimal-infra bias throughout.
 - **Bedrock's plain Converse API cannot do native web search or browser control** — verified
   empirically, not assumed: a `ConverseCommand` with `additionalModelRequestFields: { tools:
-  [{ type: "web_search_20250305", ... }] }` gets rejected with a `ValidationException` whose
+[{ type: "web_search_20250305", ... }] }` gets rejected with a `ValidationException` whose
   error message enumerates every tool type Bedrock's hosted Claude models actually accept,
   and none of them are a `web_search`/browser-control variant, at any date. AWS does have a
-  *different* product for this — Web Search on Amazon Bedrock AgentCore (2026-06-17) — but
+  _different_ product for this — Web Search on Amazon Bedrock AgentCore (2026-06-17) — but
   that's the same AgentCore Gateway path as above, with the same tradeoffs.
 
 ## Running in CI

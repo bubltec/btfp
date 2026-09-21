@@ -3,12 +3,33 @@ import type { CandidateDocument } from '../search/types.js';
 import type { ExtractionResult, Taxonomy } from './types.js';
 
 const SEVERITIES = ['mild', 'moderate', 'severe', 'unknown'] as const;
+const CONFIDENCES = ['high', 'medium', 'low'] as const;
+
+export const CLASSIFY_SYSTEM_PROMPT = [
+  'You are a veterinary-toxicology research assistant for a pet-safety catalog.',
+  'You are given web search results about ONE candidate substance, plant, food, product or activity.',
+  'Decide whether the sources show it is a real hazard to dogs or cats, and extract a catalog entry.',
+  '',
+  'Rules:',
+  '- Use only what the sources say. Never fill gaps from memory; say "unknown" instead.',
+  '- thingName is the single specific hazard (for example "Xylitol", "Sago palm"). Never a list, a',
+  '  category ("common pet toxins"), a brand campaign, or the search phrase itself.',
+  '- If the sources cover several distinct hazards, pick the one matching the candidate topic; if',
+  '  none match, set isPetHazardReport to false.',
+  '- petTypes: one entry per pet type (dog, cat, ...) the sources actually discuss, each with its own',
+  '  severity. Omit a pet type the sources do not cover.',
+  '- confidence: "high" only when two or more independent sources (veterinary, poison-control or',
+  '  university pages) agree; "medium" for one solid source; "low" for forums, ads or vague claims.',
+  '- summary: two or three sentences: what it is, why it is dangerous, and typical signs. No advice',
+  '  to treat at home.',
+  '- Marketing pages, news about unrelated topics and sources that only mention pets in passing are',
+  '  not hazard reports.',
+].join('\n');
 
 function buildPrompt(document: CandidateDocument): string {
   return (
-    `Web search results about a currently trending topic that may or may not be a pet hazard.\n\n` +
-    `Topic: ${document.title}\n\n` +
-    `Sources:\n${document.body}`
+    `Candidate topic: ${document.title}\n\n` +
+    `Search results (numbered; cite nothing that is not here):\n${document.body}`
   );
 }
 
@@ -29,6 +50,8 @@ export async function classifyDocument(
     const response = await client.send(
       new ConverseCommand({
         modelId,
+        system: [{ text: CLASSIFY_SYSTEM_PROMPT }],
+        inferenceConfig: { temperature: 0, maxTokens: 1024 },
         messages: [{ role: 'user', content: [{ text: buildPrompt(document) }] }],
         toolConfig: {
           tools: [
@@ -44,11 +67,21 @@ export async function classifyDocument(
                       isPetHazardReport: { type: 'boolean' },
                       thingName: { type: 'string' },
                       thingTypeId: { type: 'string', enum: taxonomy.thingTypeIds },
-                      petTypeId: { type: 'string', enum: taxonomy.petTypeIds },
-                      severity: { type: 'string', enum: [...SEVERITIES] },
+                      petTypes: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            petTypeId: { type: 'string', enum: taxonomy.petTypeIds },
+                            severity: { type: 'string', enum: [...SEVERITIES] },
+                          },
+                          required: ['petTypeId', 'severity'],
+                        },
+                      },
                       summary: { type: 'string' },
+                      confidence: { type: 'string', enum: [...CONFIDENCES] },
                     },
-                    required: ['isPetHazardReport'],
+                    required: ['isPetHazardReport', 'confidence'],
                   },
                 },
               },

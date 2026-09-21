@@ -15,6 +15,21 @@ describe('parseTrendRows', () => {
     expect(terms).toEqual(['xylitol gum', 'grape toxicity dogs']);
   });
 
+  it('reads rendered rows that start with a blank line (the real Trends markup)', () => {
+    const terms = parseTrendRows([
+      '',
+      '\t\ncaleb williams\n\t\n500K+\narrow_upward\n1,000%\n\t\n6 hours ago\ntrending_up\nActive',
+      '\t\nxylitol gum\n\t\n10K+',
+    ]);
+    expect(terms).toEqual(['caleb williams', 'xylitol gum']);
+  });
+
+  it('never returns page footer links as topics', () => {
+    expect(
+      parseTrendRows(['Terms', 'Privacy', 'Sign in', 'Send feedback', 'About', 'Help']),
+    ).toEqual([]);
+  });
+
   it('drops numeric-only chrome and empty lines', () => {
     expect(parseTrendRows(['', '12', '   ', 'onion powder'])).toEqual(['onion powder']);
   });

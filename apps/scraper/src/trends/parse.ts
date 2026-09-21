@@ -14,6 +14,20 @@ const HEADER_TOKENS = new Set([
   'sort by title',
   'sort by search volume',
   'all categories',
+  // Page chrome. This is what the old `<a>` fallback mistook for trending topics.
+  'home',
+  'explore',
+  'trending now',
+  'sign in',
+  'help',
+  'send feedback',
+  'privacy',
+  'terms',
+  'about',
+  'export',
+  'all trends',
+  'by relevance',
+  'search trends',
 ]);
 
 export function normalizeTrendTerm(term: string): string {
@@ -29,7 +43,12 @@ export function parseTrendRows(rowTexts: string[]): string[] {
   const terms: string[] = [];
 
   for (const row of rowTexts) {
-    const firstLine = row.split('\n')[0]?.trim() ?? '';
+    // Rendered rows start with "\t\n", so the first line is blank; take the first real one.
+    const firstLine =
+      row
+        .split('\n')
+        .map((line) => line.trim())
+        .find(Boolean) ?? '';
     if (!firstLine) continue;
     if (HEADER_TOKENS.has(firstLine.toLowerCase())) continue;
     if (firstLine.length < 2 || firstLine.length > 80) continue;

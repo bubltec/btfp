@@ -16,4 +16,11 @@ export abstract class PendingContributionStore {
     thingId: string | undefined,
   ): Promise<void>;
   abstract markApproved(rows: PendingRow[], reviewerId: string, now: string): Promise<void>;
+  /** Takes the rows out of the queue, keeping them for audit with status `rejected`. */
+  abstract markRejected(
+    rows: PendingRow[],
+    reviewerId: string,
+    now: string,
+    reason?: string,
+  ): Promise<void>;
 }

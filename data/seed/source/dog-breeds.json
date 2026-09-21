@@ -16,10 +16,7 @@
       "id": "affenpinscher",
       "name": "Affenpinscher",
       "petTypeId": "dog",
-      "traits": [
-        "brachycephalic",
-        "toy-breed"
-      ]
+      "traits": ["brachycephalic", "toy-breed"]
     },
     {
       "id": "afghan-hound",
@@ -127,17 +124,13 @@
       "id": "basset-hound",
       "name": "Basset Hound",
       "petTypeId": "dog",
-      "traits": [
-        "long-backed"
-      ]
+      "traits": ["long-backed"]
     },
     {
       "id": "beagle",
       "name": "Beagle",
       "petTypeId": "dog",
-      "traits": [
-        "long-backed"
-      ]
+      "traits": ["long-backed"]
     },
     {
       "id": "bearded-collie",
@@ -191,9 +184,7 @@
       "id": "bernese-mountain-dog",
       "name": "Bernese Mountain Dog",
       "petTypeId": "dog",
-      "traits": [
-        "giant-breed"
-      ]
+      "traits": ["giant-breed"]
     },
     {
       "id": "bichon-frise",
@@ -253,9 +244,7 @@
       "id": "boston-terrier",
       "name": "Boston Terrier",
       "petTypeId": "dog",
-      "traits": [
-        "brachycephalic"
-      ]
+      "traits": ["brachycephalic"]
     },
     {
       "id": "bouvier-des-flandres",
@@ -267,10 +256,7 @@
       "id": "boxer",
       "name": "Boxer",
       "petTypeId": "dog",
-      "traits": [
-        "brachycephalic",
-        "deep-chested"
-      ]
+      "traits": ["brachycephalic", "deep-chested"]
     },
     {
       "id": "boykin-spaniel",
@@ -294,10 +280,7 @@
       "id": "brussels-griffon",
       "name": "Brussels Griffon",
       "petTypeId": "dog",
-      "traits": [
-        "brachycephalic",
-        "toy-breed"
-      ]
+      "traits": ["brachycephalic", "toy-breed"]
     },
     {
       "id": "bull-terrier",
@@ -309,18 +292,13 @@
       "id": "bulldog",
       "name": "Bulldog",
       "petTypeId": "dog",
-      "traits": [
-        "brachycephalic"
-      ]
+      "traits": ["brachycephalic"]
     },
     {
       "id": "bullmastiff",
       "name": "Bullmastiff",
       "petTypeId": "dog",
-      "traits": [
-        "brachycephalic",
-        "giant-breed"
-      ]
+      "traits": ["brachycephalic", "giant-breed"]
     },
     {
       "id": "cairn-terrier",
@@ -338,27 +316,19 @@
       "id": "cane-corso",
       "name": "Cane Corso",
       "petTypeId": "dog",
-      "traits": [
-        "brachycephalic",
-        "giant-breed"
-      ]
+      "traits": ["brachycephalic", "giant-breed"]
     },
     {
       "id": "cardigan-welsh-corgi",
       "name": "Cardigan Welsh Corgi",
       "petTypeId": "dog",
-      "traits": [
-        "long-backed"
-      ]
+      "traits": ["long-backed"]
     },
     {
       "id": "cavalier-king-charles-spaniel",
       "name": "Cavalier King Charles Spaniel",
       "petTypeId": "dog",
-      "traits": [
-        "brachycephalic",
-        "toy-breed"
-      ]
+      "traits": ["brachycephalic", "toy-breed"]
     },
     {
       "id": "cesky-terrier",
@@ -376,17 +346,13 @@
       "id": "chihuahua",
       "name": "Chihuahua",
       "petTypeId": "dog",
-      "traits": [
-        "toy-breed"
-      ]
+      "traits": ["toy-breed"]
     },
     {
       "id": "chinese-crested",
       "name": "Chinese Crested",
       "petTypeId": "dog",
-      "traits": [
-        "toy-breed"
-      ]
+      "traits": ["toy-breed"]
     },
     {
       "id": "chinese-shar-pei",
@@ -404,9 +370,7 @@
       "id": "chow-chow",
       "name": "Chow Chow",
       "petTypeId": "dog",
-      "traits": [
-        "brachycephalic"
-      ]
+      "traits": ["brachycephalic"]
     },
     {
       "id": "cirneco-delletna",
@@ -424,17 +388,13 @@
       "id": "cocker-spaniel",
       "name": "Cocker Spaniel",
       "petTypeId": "dog",
-      "traits": [
-        "long-backed"
-      ]
+      "traits": ["long-backed"]
     },
     {
       "id": "collie",
       "name": "Collie",
       "petTypeId": "dog",
-      "traits": [
-        "deep-chested"
-      ]
+      "traits": ["deep-chested"]
     },
     {
       "id": "coton-de-tulear",
@@ -452,9 +412,7 @@
       "id": "dachshund",
       "name": "Dachshund",
       "petTypeId": "dog",
-      "traits": [
-        "long-backed"
-      ]
+      "traits": ["long-backed"]
     },
     {
       "id": "dalmatian",
@@ -472,9 +430,7 @@
       "id": "doberman-pinscher",
       "name": "Doberman Pinscher",
       "petTypeId": "dog",
-      "traits": [
-        "deep-chested"
-      ]
+      "traits": ["deep-chested"]
     },
     {
       "id": "dogo-argentino",
@@ -486,18 +442,13 @@
       "id": "dogue-de-bordeaux",
       "name": "Dogue de Bordeaux",
       "petTypeId": "dog",
-      "traits": [
-        "brachycephalic",
-        "giant-breed"
-      ]
+      "traits": ["brachycephalic", "giant-breed"]
     },
     {
       "id": "english-cocker-spaniel",
       "name": "English Cocker Spaniel",
       "petTypeId": "dog",
-      "traits": [
-        "long-backed"
-      ]
+      "traits": ["long-backed"]
     },
     {
       "id": "english-foxhound",
@@ -521,10 +472,7 @@
       "id": "english-toy-spaniel",
       "name": "English Toy Spaniel",
       "petTypeId": "dog",
-      "traits": [
-        "brachycephalic",
-        "toy-breed"
-      ]
+      "traits": ["brachycephalic", "toy-breed"]
     },
     {
       "id": "entlebucher-mountain-dog",
@@ -560,10 +508,7 @@
       "id": "french-bulldog",
       "name": "French Bulldog",
       "petTypeId": "dog",
-      "traits": [
-        "long-backed",
-        "brachycephalic"
-      ]
+      "traits": ["long-backed", "brachycephalic"]
     },
     {
       "id": "german-pinscher",
@@ -575,17 +520,13 @@
       "id": "german-shepherd-dog",
       "name": "German Shepherd Dog",
       "petTypeId": "dog",
-      "traits": [
-        "deep-chested"
-      ]
+      "traits": ["deep-chested"]
     },
     {
       "id": "german-shorthaired-pointer",
       "name": "German Shorthaired Pointer",
       "petTypeId": "dog",
-      "traits": [
-        "deep-chested"
-      ]
+      "traits": ["deep-chested"]
     },
     {
       "id": "german-wirehaired-pointer",
@@ -627,18 +568,13 @@
       "id": "great-dane",
       "name": "Great Dane",
       "petTypeId": "dog",
-      "traits": [
-        "giant-breed",
-        "deep-chested"
-      ]
+      "traits": ["giant-breed", "deep-chested"]
     },
     {
       "id": "great-pyrenees",
       "name": "Great Pyrenees",
       "petTypeId": "dog",
-      "traits": [
-        "giant-breed"
-      ]
+      "traits": ["giant-breed"]
     },
     {
       "id": "greater-swiss-mountain-dog",
@@ -662,9 +598,7 @@
       "id": "havanese",
       "name": "Havanese",
       "petTypeId": "dog",
-      "traits": [
-        "toy-breed"
-      ]
+      "traits": ["toy-breed"]
     },
     {
       "id": "ibizan-hound",
@@ -688,9 +622,7 @@
       "id": "irish-setter",
       "name": "Irish Setter",
       "petTypeId": "dog",
-      "traits": [
-        "deep-chested"
-      ]
+      "traits": ["deep-chested"]
     },
     {
       "id": "irish-terrier",
@@ -708,27 +640,19 @@
       "id": "irish-wolfhound",
       "name": "Irish Wolfhound",
       "petTypeId": "dog",
-      "traits": [
-        "giant-breed",
-        "deep-chested"
-      ]
+      "traits": ["giant-breed", "deep-chested"]
     },
     {
       "id": "italian-greyhound",
       "name": "Italian Greyhound",
       "petTypeId": "dog",
-      "traits": [
-        "toy-breed"
-      ]
+      "traits": ["toy-breed"]
     },
     {
       "id": "japanese-chin",
       "name": "Japanese Chin",
       "petTypeId": "dog",
-      "traits": [
-        "brachycephalic",
-        "toy-breed"
-      ]
+      "traits": ["brachycephalic", "toy-breed"]
     },
     {
       "id": "keeshond",
@@ -776,18 +700,13 @@
       "id": "leonberger",
       "name": "Leonberger",
       "petTypeId": "dog",
-      "traits": [
-        "giant-breed"
-      ]
+      "traits": ["giant-breed"]
     },
     {
       "id": "lhasa-apso",
       "name": "Lhasa Apso",
       "petTypeId": "dog",
-      "traits": [
-        "long-backed",
-        "brachycephalic"
-      ]
+      "traits": ["long-backed", "brachycephalic"]
     },
     {
       "id": "lowchen",
@@ -799,26 +718,19 @@
       "id": "maltese",
       "name": "Maltese",
       "petTypeId": "dog",
-      "traits": [
-        "toy-breed"
-      ]
+      "traits": ["toy-breed"]
     },
     {
       "id": "manchester-terrier",
       "name": "Manchester Terrier",
       "petTypeId": "dog",
-      "traits": [
-        "toy-breed"
-      ]
+      "traits": ["toy-breed"]
     },
     {
       "id": "mastiff",
       "name": "Mastiff",
       "petTypeId": "dog",
-      "traits": [
-        "giant-breed",
-        "deep-chested"
-      ]
+      "traits": ["giant-breed", "deep-chested"]
     },
     {
       "id": "miniature-american-shepherd",
@@ -836,9 +748,7 @@
       "id": "miniature-pinscher",
       "name": "Miniature Pinscher",
       "petTypeId": "dog",
-      "traits": [
-        "toy-breed"
-      ]
+      "traits": ["toy-breed"]
     },
     {
       "id": "miniature-schnauzer",
@@ -850,9 +760,7 @@
       "id": "neapolitan-mastiff",
       "name": "Neapolitan Mastiff",
       "petTypeId": "dog",
-      "traits": [
-        "giant-breed"
-      ]
+      "traits": ["giant-breed"]
     },
     {
       "id": "nederlandse-kooikerhondje",
@@ -864,10 +772,7 @@
       "id": "newfoundland",
       "name": "Newfoundland",
       "petTypeId": "dog",
-      "traits": [
-        "giant-breed",
-        "deep-chested"
-      ]
+      "traits": ["giant-breed", "deep-chested"]
     },
     {
       "id": "norfolk-terrier",
@@ -921,9 +826,7 @@
       "id": "papillon",
       "name": "Papillon",
       "petTypeId": "dog",
-      "traits": [
-        "toy-breed"
-      ]
+      "traits": ["toy-breed"]
     },
     {
       "id": "parson-russell-terrier",
@@ -935,19 +838,13 @@
       "id": "pekingese",
       "name": "Pekingese",
       "petTypeId": "dog",
-      "traits": [
-        "long-backed",
-        "brachycephalic",
-        "toy-breed"
-      ]
+      "traits": ["long-backed", "brachycephalic", "toy-breed"]
     },
     {
       "id": "pembroke-welsh-corgi",
       "name": "Pembroke Welsh Corgi",
       "petTypeId": "dog",
-      "traits": [
-        "long-backed"
-      ]
+      "traits": ["long-backed"]
     },
     {
       "id": "petit-basset-griffon-vendeen",
@@ -983,19 +880,13 @@
       "id": "pomeranian",
       "name": "Pomeranian",
       "petTypeId": "dog",
-      "traits": [
-        "toy-breed"
-      ]
+      "traits": ["toy-breed"]
     },
     {
       "id": "poodle",
       "name": "Poodle",
       "petTypeId": "dog",
-      "traits": [
-        "long-backed",
-        "deep-chested",
-        "toy-breed"
-      ]
+      "traits": ["long-backed", "deep-chested", "toy-breed"]
     },
     {
       "id": "portuguese-podengo-pequeno",
@@ -1013,10 +904,7 @@
       "id": "pug",
       "name": "Pug",
       "petTypeId": "dog",
-      "traits": [
-        "brachycephalic",
-        "toy-breed"
-      ]
+      "traits": ["brachycephalic", "toy-breed"]
     },
     {
       "id": "puli",
@@ -1118,11 +1006,7 @@
       "id": "shih-tzu",
       "name": "Shih Tzu",
       "petTypeId": "dog",
-      "traits": [
-        "long-backed",
-        "brachycephalic",
-        "toy-breed"
-      ]
+      "traits": ["long-backed", "brachycephalic", "toy-breed"]
     },
     {
       "id": "siberian-husky",
@@ -1134,9 +1018,7 @@
       "id": "silky-terrier",
       "name": "Silky Terrier",
       "petTypeId": "dog",
-      "traits": [
-        "toy-breed"
-      ]
+      "traits": ["toy-breed"]
     },
     {
       "id": "skye-terrier",
@@ -1178,10 +1060,7 @@
       "id": "st-bernard",
       "name": "St. Bernard",
       "petTypeId": "dog",
-      "traits": [
-        "giant-breed",
-        "deep-chested"
-      ]
+      "traits": ["giant-breed", "deep-chested"]
     },
     {
       "id": "staffordshire-bull-terrier",
@@ -1211,9 +1090,7 @@
       "id": "tibetan-mastiff",
       "name": "Tibetan Mastiff",
       "petTypeId": "dog",
-      "traits": [
-        "giant-breed"
-      ]
+      "traits": ["giant-breed"]
     },
     {
       "id": "tibetan-spaniel",
@@ -1231,9 +1108,7 @@
       "id": "toy-fox-terrier",
       "name": "Toy Fox Terrier",
       "petTypeId": "dog",
-      "traits": [
-        "toy-breed"
-      ]
+      "traits": ["toy-breed"]
     },
     {
       "id": "treeing-walker-coonhound",
@@ -1251,9 +1126,7 @@
       "id": "weimaraner",
       "name": "Weimaraner",
       "petTypeId": "dog",
-      "traits": [
-        "deep-chested"
-      ]
+      "traits": ["deep-chested"]
     },
     {
       "id": "welsh-springer-spaniel",
@@ -1307,9 +1180,7 @@
       "id": "yorkshire-terrier",
       "name": "Yorkshire Terrier",
       "petTypeId": "dog",
-      "traits": [
-        "toy-breed"
-      ]
+      "traits": ["toy-breed"]
     }
   ]
 }

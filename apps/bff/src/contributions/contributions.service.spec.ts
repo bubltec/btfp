@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
-import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, NotFoundException, ValidationPipe } from '@nestjs/common';
 import { CreateContributionDto } from './dto/create-contribution.dto.js';
 import { mockAws } from '../test-utils.js';
 import {
@@ -13,6 +13,9 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { ContributionsService } from './contributions.service.js';
 import { DynamoPendingContributionStore } from './dynamo-pending-contribution.store.js';
 import type { SearchService } from '../search/search.service.js';
+import { VALIDATION_PIPE_OPTIONS } from '../validation.js';
+import { PendingContributionStore, type PendingRow } from './pending-contribution.store.js';
+import type { Thing } from '@btfp/shared-types';
 
 function contributionsService(
   db: DynamoDBDocumentClient,
@@ -36,7 +39,7 @@ const e2ePayload: CreateContributionDto = {
   },
 };
 
-const pipe = new ValidationPipe({ whitelist: true, transform: true });
+const pipe = new ValidationPipe(VALIDATION_PIPE_OPTIONS);
 
 describe('ContributionsService.propose', () => {
   it('plainifies ValidationPipe class instances before PutCommand', async () => {
@@ -248,5 +251,209 @@ describe('ContributionsService.listPending', () => {
     expect(pending).toHaveLength(1);
     expect(pending[0]?.id).toBe('1');
     expect(pending[0]?.payload.details).toEqual({ notes: 'toxic' });
+  });
+});
+
+// --- moderation queue: filtering, previews, reject ---------------------------------
+
+class FakeQueue extends PendingContributionStore {
+  rejected: { rows: PendingRow[]; reviewerId: string; reason?: string }[] = [];
+  constructor(readonly rows: PendingRow[]) {
+    super();
+  }
+  async listAll() {
+    return this.rows.filter((r) => r.payload && typeof r.payload === 'object');
+  }
+  async get(thingId: string, sk: string) {
+    return this.rows.find((r) => r.PK === `THING#${thingId}` && r.SK === sk);
+  }
+  async insert() {}
+  async accumulate() {}
+  async markApproved() {}
+  async markRejected(rows: PendingRow[], reviewerId: string, _now: string, reason?: string) {
+    this.rejected.push({ rows, reviewerId, reason });
+  }
+}
+
+const chocolateThing: Thing = {
+  id: 'choc',
+  name: 'Chocolate',
+  otherNames: [],
+  thingTypeId: 'food',
+  petTypes: [{ petTypeId: 'dog', severity: 'mild' }],
+  details: {},
+  source: 'aspca',
+  verified: true,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
+
+function row(over: Partial<PendingRow> & { SK: string }): PendingRow {
+  return {
+    id: over.SK,
+    PK: 'THING#x',
+    contributorId: 'u1',
+    status: 'pending',
+    createdAt: '2026-02-01T00:00:00.000Z',
+    payload: { name: 'Grapes', thingTypeId: 'food' },
+    ...over,
+  };
+}
+
+function queueService(
+  rows: PendingRow[],
+  deps: {
+    getById?: (id: string) => Promise<Thing | null>;
+    findDuplicate?: () => Promise<Thing | undefined>;
+  } = {},
+) {
+  const queue = new FakeQueue(rows);
+  const service = new ContributionsService(
+    queue,
+    { getById: deps.getById ?? (async () => null) } as never,
+    {} as never,
+    { findDuplicate: deps.findDuplicate ?? (async () => undefined) } as unknown as SearchService,
+  );
+  return { service, queue };
+}
+
+describe('ContributionsService.listPending: what a moderator can act on', () => {
+  it('leaves out rows with no name or type instead of rendering "(no name)"', async () => {
+    const { service } = queueService([
+      row({ SK: 'a', payload: {} }),
+      row({ SK: 'b', payload: { source: 'agentcore', details: { summary: 's' } } }),
+      row({ SK: 'c', payload: { name: 'Grapes' } }),
+      row({ SK: 'd', payload: { thingTypeId: 'food' } }),
+      row({ SK: 'e', payload: { name: 'Grapes', thingTypeId: 'food' } }),
+    ]);
+    const cards = await service.listPending();
+    expect(cards.map((c) => c.SK)).toEqual(['e']);
+  });
+
+  it('previews an edit against the live entry: what approval will change', async () => {
+    const getById = vi.fn(async () => chocolateThing);
+    const { service } = queueService(
+      [
+        row({
+          SK: 'e1',
+          thingId: 'choc',
+          payload: {
+            name: 'Chocolate',
+            thingTypeId: 'food',
+            petTypes: [{ petTypeId: 'dog', severity: 'severe' }],
+          },
+        }),
+      ],
+      { getById },
+    );
+    const [card] = await service.listPending();
+    expect(getById).toHaveBeenCalledWith('choc');
+    expect(card?.preview.mergesInto).toBeUndefined();
+    expect(card?.preview.changes).toContainEqual({
+      field: 'petTypes.dog',
+      label: 'Dangerous for dog',
+      kind: 'changed',
+      before: 'mild',
+      after: 'severe',
+    });
+  });
+
+  it('says which entry a new-looking card will merge into when the catalog already has it', async () => {
+    const { service } = queueService(
+      [row({ SK: 'n1', payload: { name: 'Choc', thingTypeId: 'food', otherNames: [] } })],
+      { findDuplicate: async () => chocolateThing },
+    );
+    const [card] = await service.listPending();
+    expect(card?.preview.mergesInto).toEqual({ id: 'choc', name: 'Chocolate' });
+  });
+
+  it('lists every field as added for a genuinely new entry', async () => {
+    const { service } = queueService([
+      row({
+        SK: 'n2',
+        payload: {
+          name: 'Grapes',
+          thingTypeId: 'food',
+          petTypes: [{ petTypeId: 'dog', severity: 'severe' }],
+          details: { notes: 'Kidney failure' },
+        },
+      }),
+    ]);
+    const [card] = await service.listPending();
+    expect(card?.preview.changes.every((c) => c.kind === 'added')).toBe(true);
+    expect(card?.preview.changes.map((c) => c.field)).toContain('details.notes');
+  });
+
+  it('flags a card whose linked entry no longer exists (approval would create a new one)', async () => {
+    const { service } = queueService([row({ SK: 'm1', thingId: 'gone' })], {
+      getById: async () => null,
+    });
+    const [card] = await service.listPending();
+    expect(card?.preview.targetMissing).toBe(true);
+  });
+
+  it('a preview failure on one card does not blank the queue', async () => {
+    const { service } = queueService(
+      [
+        row({ SK: 'bad', thingId: 'boom', createdAt: '2026-02-02T00:00:00.000Z' }),
+        row({ SK: 'ok', payload: { name: 'Xylitol', thingTypeId: 'food' } }),
+      ],
+      {
+        getById: async (id) => {
+          if (id === 'boom') throw new Error('legacy row exploded');
+          return null;
+        },
+      },
+    );
+    const cards = await service.listPending();
+    expect(cards).toHaveLength(2);
+    expect(cards.find((c) => c.SK === 'bad')?.preview).toEqual({ changes: [], unavailable: true });
+    expect(cards.find((c) => c.SK === 'ok')?.preview.unavailable).toBeUndefined();
+  });
+});
+
+describe('ContributionsService.reject', () => {
+  it('rejects the whole card: the newest row and the older rows folded into it', async () => {
+    const { service, queue } = queueService([
+      row({ PK: 'THING#g', SK: 'new', createdAt: '2026-02-02T00:00:00.000Z' }),
+      row({ PK: 'THING#g2', SK: 'old', createdAt: '2026-02-01T00:00:00.000Z' }),
+      row({
+        PK: 'THING#other',
+        SK: 'unrelated',
+        payload: { name: 'Xylitol', thingTypeId: 'food' },
+      }),
+    ]);
+    const result = await service.reject('g', 'new', 'reviewer-1', '  spam  ');
+    expect(result).toEqual({ rejected: 2 });
+    expect(queue.rejected).toHaveLength(1);
+    expect(queue.rejected[0]?.rows.map((r) => r.SK).sort()).toEqual(['new', 'old']);
+    expect(queue.rejected[0]).toMatchObject({ reviewerId: 'reviewer-1', reason: 'spam' });
+  });
+
+  it('rejects a row with no name on its own, without pulling in unrelated rows', async () => {
+    const { service, queue } = queueService([
+      row({ PK: 'THING#a', SK: 'nameless', payload: {} }),
+      row({ PK: 'THING#b', SK: 'other' }),
+    ]);
+    expect(await service.reject('a', 'nameless', 'r1')).toEqual({ rejected: 1 });
+    expect(queue.rejected[0]?.rows.map((r) => r.SK)).toEqual(['nameless']);
+    expect(queue.rejected[0]?.reason).toBeUndefined();
+  });
+
+  it('404s for a missing row and refuses one that was already reviewed', async () => {
+    const { service } = queueService([
+      row({ PK: 'THING#done', SK: 'approved', status: 'approved' }),
+    ]);
+    await expect(service.reject('nope', 'x', 'r1')).rejects.toThrow(NotFoundException);
+    await expect(service.reject('done', 'approved', 'r1')).rejects.toThrow(BadRequestException);
+  });
+});
+
+describe('ContributionsService.approve: unreviewable rows', () => {
+  it('refuses a row with no name or type, rather than minting an "Unnamed" entry', async () => {
+    const { service } = queueService([
+      row({ PK: 'THING#a', SK: 'nameless', payload: { source: 's' } }),
+    ]);
+    await expect(service.approve('a', 'nameless', 'r1')).rejects.toThrow(/reject it instead/);
   });
 });

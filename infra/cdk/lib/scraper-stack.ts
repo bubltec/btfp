@@ -11,7 +11,7 @@ import { Platform } from 'aws-cdk-lib/aws-ecr-assets';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { EnvConfig } from './config.js';
-import { BEDROCK_INFERENCE_PROFILE_ID } from './config.js';
+import { SCRAPER_BEDROCK_INFERENCE_PROFILE_ID } from './config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -56,7 +56,7 @@ export class ScraperStack extends cdk.Stack {
       new iam.PolicyStatement({
         actions: ['bedrock:InvokeModel'],
         resources: [
-          `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/${BEDROCK_INFERENCE_PROFILE_ID}`,
+          `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/${SCRAPER_BEDROCK_INFERENCE_PROFILE_ID}`,
           'arn:aws:bedrock:*::foundation-model/anthropic.claude-*',
         ],
       }),
@@ -133,7 +133,7 @@ export class ScraperStack extends cdk.Stack {
       new iam.PolicyStatement({
         actions: ['bedrock:InvokeModel'],
         resources: [
-          `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/${BEDROCK_INFERENCE_PROFILE_ID}`,
+          `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/${SCRAPER_BEDROCK_INFERENCE_PROFILE_ID}`,
           'arn:aws:bedrock:*::foundation-model/anthropic.claude-*',
         ],
       }),
@@ -187,7 +187,7 @@ export class ScraperStack extends cdk.Stack {
         STAGE: envName,
         AWS_REGION: this.region,
         CONTENT_TABLE_NAME: props.contentTable.tableName,
-        BEDROCK_INFERENCE_PROFILE_ID,
+        BEDROCK_INFERENCE_PROFILE_ID: SCRAPER_BEDROCK_INFERENCE_PROFILE_ID,
         AGENTCORE_GATEWAY_URL: gateway.getAtt('GatewayUrl').toString(),
         AGENTCORE_MEMORY_ID: memory.getAtt('MemoryId').toString(),
       },

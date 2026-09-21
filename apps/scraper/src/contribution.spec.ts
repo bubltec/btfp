@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mockAws } from './test-utils.js';
 import { DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { SCRAPER_CONTRIBUTOR_ID, writeContribution } from './contribution.js';
+import { SCRAPER_CONTRIBUTOR_ID, isFileableExtraction, writeContribution } from './contribution.js';
 import type { CandidateDocument } from './search/types.js';
 import type { ExtractionResult } from './extract/types.js';
 
@@ -19,8 +19,8 @@ const extraction: ExtractionResult = {
   isPetHazardReport: true,
   thingName: 'Sock',
   thingTypeId: 'unknown',
-  petTypeId: 'dog',
-  severity: 'moderate',
+  petTypes: [{ petTypeId: 'dog', severity: 'moderate' }],
+  confidence: 'high',
   summary: 'Dog ate a sock, vomited it up fine.',
 };
 
@@ -65,7 +65,7 @@ describe('writeContribution', () => {
     expect(contribution.payload.details).toMatchObject({ trendTerm: 'sock' });
   });
 
-  it('defaults to an empty petTypes array when the extraction has no petTypeId', async () => {
+  it('defaults to an empty petTypes array when the extraction has no petTypes', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(PutCommand).resolves({});
     db.on(QueryCommand).resolves({ Items: [] });
@@ -73,7 +73,7 @@ describe('writeContribution', () => {
     const contribution = await writeContribution(
       DynamoDBDocumentClient.from(new DynamoDBClient({})),
       document,
-      { ...extraction, petTypeId: undefined },
+      { ...extraction, petTypes: undefined },
     );
 
     expect(contribution.payload.petTypes).toEqual([]);
@@ -102,5 +102,29 @@ describe('writeContribution', () => {
     const item = db.commandCalls(PutCommand)[0]?.args[0].input.Item as Record<string, unknown>;
     expect(item.PK).toBe('THING#existing-chocolate');
     expect(item.thingId).toBe('existing-chocolate');
+  });
+});
+
+describe('isFileableExtraction / nameless candidates', () => {
+  it('needs both a name and a type', () => {
+    expect(isFileableExtraction(extraction)).toBe(true);
+    expect(isFileableExtraction({ ...extraction, thingName: undefined })).toBe(false);
+    expect(isFileableExtraction({ ...extraction, thingName: '  ' })).toBe(false);
+    expect(isFileableExtraction({ ...extraction, thingTypeId: undefined })).toBe(false);
+    expect(isFileableExtraction({ ...extraction, confidence: 'low' })).toBe(false);
+    expect(isFileableExtraction({ ...extraction, confidence: 'medium' })).toBe(true);
+  });
+
+  it('refuses to write a nameless contribution', async () => {
+    const db = mockAws(DynamoDBDocumentClient);
+    db.on(PutCommand).resolves({});
+    db.on(QueryCommand).resolves({ Items: [] });
+    await expect(
+      writeContribution(DynamoDBDocumentClient.from(new DynamoDBClient({})), document, {
+        ...extraction,
+        thingName: undefined,
+      }),
+    ).rejects.toThrow(/without a thing name/);
+    expect(db.commandCalls(PutCommand)).toHaveLength(0);
   });
 });

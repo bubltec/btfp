@@ -5,12 +5,12 @@ Single-table design in the `Content` table (`infra/cdk/lib/data-stack.ts`), plus
 
 ## Content table
 
-| Item | PK | SK | Notes |
-|---|---|---|---|
-| Thing | `THING#<id>` | `META` | The dangerous thing itself |
-| ThingType | `THINGTYPE#<id>` | `META` | Taxonomy: plant, food, medication, ... |
-| PetType | `PETTYPE#<id>` | `META` | Taxonomy: dog, cat, horse |
-| Contribution | `THING#<id or new-id>` | `CONTRIB#<createdAt>#<contributorId>` | Pending edit/addition |
+| Item         | PK                     | SK                                    | Notes                                  |
+| ------------ | ---------------------- | ------------------------------------- | -------------------------------------- |
+| Thing        | `THING#<id>`           | `META`                                | The dangerous thing itself             |
+| ThingType    | `THINGTYPE#<id>`       | `META`                                | Taxonomy: plant, food, medication, ... |
+| PetType      | `PETTYPE#<id>`         | `META`                                | Taxonomy: dog, cat, horse              |
+| Contribution | `THING#<id or new-id>` | `CONTRIB#<createdAt>#<contributorId>` | Pending edit/addition                  |
 
 `Thing.details` and `ThingType.details`/`PetType.details` are free-form maps — this is
 where "unstructured data" lives (toxic principles, dose thresholds, clinical signs,
