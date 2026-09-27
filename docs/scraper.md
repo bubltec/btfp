@@ -30,7 +30,10 @@ AgentCore, authenticated by the Fargate task role.
    - **Search discovery** (`discover/seed-search.ts`) — a fixed list of hazard-news
      queries ("new toxic substance dogs veterinarians warn this week", …) run through
      the web-search tool; the model lists the specific substances the results name.
-     This is the source that actually finds toxic items.
+     This is the source that actually finds toxic items. Each query remembers the result
+     URLs it has seen (`discover/seed-state.ts`). A run that returns no new URL skips the
+     extraction and backs the query off, doubling from 12h up to a week, so a query stuck
+     on the same pages stops costing a search every 6h. Any new URL resets it.
 
 2. **Skip already-collected topics** — two layers:
    - Exact-term DynamoDB marker (`PK: SCRAPERTREND#{normalized term}`).
@@ -58,6 +61,15 @@ summary, confidence }`. `thingTypeId`/`petTypeId` are constrained to what exists
    candidate proposes a new one. `confidence` is stored in `details` for the moderator.
    Then the topic is marked processed and written into AgentCore Memory.
 
+6. **Enrich existing entries** (`enrich.ts`) — whatever part of `MAX_TOPICS_PER_RUN` new
+   topics didn't use goes to catalog Things with no known severity for some pet type
+   (`unknown` or missing). Dog and cat gaps come first, then entries with the most gaps.
+   Research asks about exactly the missing pet types, and the classifier is told which
+   ones it is filling in. A contribution is filed against that Thing, under its own name
+   and type, only when the result gives a known severity for a missing pet type at
+   confidence above `low`. Every attempt writes `PK: SCRAPERENRICH#{thingId}`, and an
+   entry is not retried for 30 days.
+
 ## Configuration
 
 Baked into the Fargate task definition by `infra/cdk/lib/scraper-stack.ts`
@@ -70,7 +82,7 @@ Baked into the Fargate task definition by `infra/cdk/lib/scraper-stack.ts`
 | `TRENDS_GEO`            | `US`                 | Trends geo                          |
 | `TRENDS_HOURS`          | `24`                 | Trends window (4 / 24 / 48 / 168)   |
 | `TRENDS_CATEGORY`       | `13`                 | Pets and Animals                    |
-| `MAX_TOPICS_PER_RUN`    | `8`                  | Cost cap per 6h run                 |
+| `MAX_TOPICS_PER_RUN`    | `8`                  | Topics + enrichments per 6h run     |
 | `MAX_SEARCH_RESULTS`    | `5`                  | Hits per topic                      |
 
 Schedule is `events.Schedule.rate(...)` in `scraper-stack.ts`, currently
@@ -84,6 +96,10 @@ stack does not crash-loop.
 
 - `PK: SCRAPERTREND#{normalized term}, SK: META` — exact topic already
   processed. Delete this item to force that term to be researched again.
+- `PK: SCRAPERSEED#{normalized query}, SK: META` — a discovery query's seen URLs and
+  backoff. Delete it to search that query again next run.
+- `PK: SCRAPERENRICH#{thingId}, SK: META` — last enrichment attempt for a Thing and its
+  outcome. Delete it to retry that Thing before the 30 days are up.
 - AgentCore Memory records under `/scraper/btfp-scraper` — semantic near-
   duplicates. These extract asynchronously after `CreateEvent`; the Dynamo
   marker is what stops the _next_ run immediately.

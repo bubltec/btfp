@@ -1,10 +1,11 @@
 import { ScanCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import type { ThingIdentity } from '@btfp/shared-types';
+import type { PetToxicity, ThingIdentity } from '@btfp/shared-types';
 import { CONTENT_TABLE_NAME } from './dynamo.js';
 import type { Taxonomy } from './extract/types.js';
 
 export interface CatalogThing extends ThingIdentity {
   id: string;
+  petTypes: PetToxicity[];
 }
 
 async function scanIds(db: DynamoDBDocumentClient, prefix: string): Promise<string[]> {
@@ -71,6 +72,11 @@ export async function loadThingCatalog(db: DynamoDBDocumentClient): Promise<Cata
           item.details && typeof item.details === 'object'
             ? (item.details as Record<string, unknown>)
             : {},
+        petTypes: Array.isArray(item.petTypes)
+          ? (item.petTypes as PetToxicity[]).filter(
+              (pet) => typeof pet?.petTypeId === 'string' && typeof pet.severity === 'string',
+            )
+          : [],
       });
     }
     lastKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;

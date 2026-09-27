@@ -10,6 +10,7 @@ import {
 // so ValidationPipe sees paramtypes [Function, Object] and never transforms `payload`.
 import { CreateContributionDto } from './dto/create-contribution.dto.js';
 import { RejectContributionDto } from './dto/reject-contribution.dto.js';
+import { ReviewContributionDto } from './dto/review-contribution.dto.js';
 
 // Prod still requires verifiedContributor. Dev/local only needs a session —
 // otherwise a first login (email, no quiz) hits 403 and the queue looks empty.
@@ -33,24 +34,23 @@ export class ContributionsController {
     return this.contributions.listPending();
   }
 
-  @Post(':thingId/:sk/approve')
+  @Post(':thingId/approve')
   @UseGuards(ModerationGuard)
   async approve(
     @Param('thingId') thingId: string,
-    @Param('sk') sk: string,
+    @Body() dto: ReviewContributionDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.contributions.approve(thingId, decodeURIComponent(sk), user.id);
+    return this.contributions.approve(thingId, dto.sk, user.id);
   }
 
-  @Post(':thingId/:sk/reject')
+  @Post(':thingId/reject')
   @UseGuards(ModerationGuard)
   async reject(
     @Param('thingId') thingId: string,
-    @Param('sk') sk: string,
     @Body() dto: RejectContributionDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.contributions.reject(thingId, decodeURIComponent(sk), user.id, dto?.reason);
+    return this.contributions.reject(thingId, dto.sk, user.id, dto.reason);
   }
 }

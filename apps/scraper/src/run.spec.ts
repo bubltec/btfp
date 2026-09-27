@@ -66,6 +66,7 @@ describe('run', () => {
   it('skips a topic already marked or remembered', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(GetCommand).resolves({ Item: { PK: 'SCRAPERTREND#xylitol gum' } });
+    db.on(ScanCommand).resolves({ Items: [] });
     const search = vi.fn();
     await run(config, client(), deps({ search: { search } }));
     expect(search).not.toHaveBeenCalled();
@@ -241,6 +242,124 @@ describe('run', () => {
       name: 'Xylitol',
       source: 'web-search',
       sourceUrl: 'https://example.com/xylitol',
+    });
+  });
+
+  describe('enriching existing entries', () => {
+    const begonia = {
+      PK: 'THING#begonia',
+      SK: 'META',
+      id: 'begonia',
+      name: 'Elephant-Ear Begonia',
+      thingTypeId: 'plant',
+      otherNames: [],
+      petTypes: [
+        { petTypeId: 'dog', severity: 'unknown' },
+        { petTypeId: 'cat', severity: 'unknown' },
+      ],
+    };
+
+    function catalogDb(enrichedAt?: string) {
+      const db = mockAws(DynamoDBDocumentClient);
+      db.on(GetCommand).callsFake((input: { Key: { PK: string } }) =>
+        input.Key.PK === 'SCRAPERENRICH#begonia' && enrichedAt
+          ? { Item: { attemptedAt: enrichedAt } }
+          : {},
+      );
+      db.on(ScanCommand).callsFake(
+        (input: { ExpressionAttributeValues: Record<string, string> }) => {
+          const prefix =
+            input.ExpressionAttributeValues[':prefix'] ??
+            input.ExpressionAttributeValues[':thingPrefix'];
+          if (prefix === 'PETTYPE#') return { Items: [{ id: 'dog' }, { id: 'cat' }] };
+          if (prefix === 'THINGTYPE#') return { Items: [{ id: 'plant' }] };
+          return { Items: [begonia] };
+        },
+      );
+      db.on(QueryCommand).resolves({ Items: [] });
+      db.on(PutCommand).resolves({});
+      return db;
+    }
+
+    function puts(db: ReturnType<typeof mockAws>): Record<string, unknown>[] {
+      return db
+        .commandCalls(PutCommand)
+        .map(
+          (call: { args: [{ input: { Item?: Record<string, unknown> } }] }) =>
+            call.args[0].input.Item ?? {},
+        );
+    }
+
+    it('spends unused budget on an unknown entry and files an update against it', async () => {
+      const db = catalogDb();
+      const searched: string[] = [];
+      const classify = vi.fn<ScraperDeps['classify']>(async () => ({
+        isPetHazardReport: true,
+        thingName: 'Begonia',
+        thingTypeId: 'plant',
+        petTypes: [{ petTypeId: 'dog', severity: 'mild' }],
+        confidence: 'high',
+      }));
+      await run(
+        config,
+        client(),
+        deps({
+          trends: { listTrendingTopics: async () => [] },
+          search: {
+            search: async (q: string) => {
+              searched.push(q);
+              return [{ title: 't', url: 'https://example.com/begonia', text: 'x' }];
+            },
+          },
+          classify,
+        }),
+      );
+
+      expect(searched).toContain('Elephant-Ear Begonia toxic to dogs');
+      expect(classify.mock.calls[0]?.[2]).toMatchObject({ focusPetTypeIds: ['dog', 'cat'] });
+      const items = puts(db);
+      const contrib = items.find((i) => String(i.SK ?? '').startsWith('CONTRIB#'));
+      // Filed against the existing entry under its own name, not the classifier's rename.
+      expect(contrib).toMatchObject({ PK: 'THING#begonia', thingId: 'begonia' });
+      expect(contrib?.payload).toMatchObject({ name: 'Elephant-Ear Begonia' });
+      expect(items.find((i) => i.PK === 'SCRAPERENRICH#begonia')).toMatchObject({
+        outcome: 'Update filed.',
+      });
+    });
+
+    it('files nothing when the research adds no known severity, but records the attempt', async () => {
+      const db = catalogDb();
+      await run(
+        config,
+        client(),
+        deps({
+          trends: { listTrendingTopics: async () => [] },
+          classify: async () => ({
+            isPetHazardReport: true,
+            thingName: 'Begonia',
+            thingTypeId: 'plant',
+            petTypes: [{ petTypeId: 'dog', severity: 'unknown' }],
+            confidence: 'high',
+          }),
+        }),
+      );
+      const items = puts(db);
+      expect(items.some((i) => String(i.SK ?? '').startsWith('CONTRIB#'))).toBe(false);
+      expect(items.find((i) => i.PK === 'SCRAPERENRICH#begonia')).toMatchObject({
+        outcome: 'No new severity found.',
+      });
+    });
+
+    it('skips an entry researched within the retry window', async () => {
+      const db = catalogDb(new Date().toISOString());
+      const search = vi.fn(async () => []);
+      await run(
+        config,
+        client(),
+        deps({ trends: { listTrendingTopics: async () => [] }, search: { search } }),
+      );
+      expect(search).not.toHaveBeenCalled();
+      expect(puts(db).some((i) => i.PK === 'SCRAPERENRICH#begonia')).toBe(false);
     });
   });
 });

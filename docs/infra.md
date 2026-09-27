@@ -88,7 +88,7 @@ transform. The behavior is covered by `infra/cdk/lib/lambda-canary.spec.ts`.
 | WAF (2 rule groups)                                                       | ~$6-8/mo                                                                |
 | SES                                                                       | ~free — $0.10/1,000 emails, and this only sends verification codes      |
 | Bedrock (Haiku for domain classification; Sonnet for scraper research)    | ~free for Haiku; scraper Sonnet is cents per run                        |
-| AgentCore Web Search (scraper: 5 discovery + 3 per new topic, 4 runs/day) | ~$5-25/mo per env at $7/1,000 queries (already-seen topics are skipped) |
+| AgentCore Web Search (scraper: ≤5 discovery + ≤4 per topic or enrichment, 8/run, 4 runs/day) | ~$10-35/mo per env at $7/1,000 queries (stale discovery queries back off) |
 | AgentCore Browser + Memory (scraper)                                      | pennies at this cadence                                                 |
 | Brave Search (optional, org-legitimacy signal)                            | free tier covers this app's volume                                      |
 | ECS Fargate (scraper, ~5min/run, every 6h)                                | ~$1-2/mo per env                                                        |

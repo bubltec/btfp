@@ -107,21 +107,8 @@ function ContributionsSection() {
   }
 
   async function approve(item: PendingContributionCard) {
-    const thingId = item.PK!.replace('THING#', '');
     try {
-      const res = await fetch(
-        `/api/contributions/${thingId}/${encodeURIComponent(item.SK!)}/approve`,
-        {
-          method: 'POST',
-          credentials: 'include',
-        },
-      );
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({ message: undefined }))) as {
-          message?: string;
-        };
-        throw new Error(body.message ?? `Approve failed: ${res.status}`);
-      }
+      await api.approveContribution(item.PK!.replace('THING#', ''), item.SK!);
       load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Approve failed');

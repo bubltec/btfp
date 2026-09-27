@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { Breed, PetType, Thing } from '@btfp/shared-types';
+import type { Breed, PetType, Severity, Thing } from '@btfp/shared-types';
 import { api } from '../lib/api.js';
 import { ThingCard } from '../components/ThingCard.js';
 import { PetTypeSelect } from '../components/PetTypeSelect.js';
@@ -15,6 +15,24 @@ function randomSample<T>(items: T[], count: number): T[] {
     [shuffled[i], shuffled[j]] = [shuffled[j] as T, shuffled[i] as T];
   }
   return shuffled.slice(0, count);
+}
+
+// The pets most visitors have. The idle homepage leads with what's worst for them.
+const FEATURED_PET_TYPES = new Set(['dog', 'cat']);
+
+function worstFeaturedSeverity(thing: Thing): Severity | undefined {
+  const severities = thing.petTypes
+    .filter((pet) => FEATURED_PET_TYPES.has(pet.petTypeId))
+    .map((pet) => pet.severity);
+  return (['severe', 'moderate'] as const).find((s) => severities.includes(s));
+}
+
+/** A random pick of dog/cat-severe things, topped up with moderate ones if there aren't enough. */
+function featuredSample(things: Thing[], count: number): Thing[] {
+  const severe = things.filter((t) => worstFeaturedSeverity(t) === 'severe');
+  const moderate = things.filter((t) => worstFeaturedSeverity(t) === 'moderate');
+  const picked = randomSample(severe, count);
+  return [...picked, ...randomSample(moderate, count - picked.length)];
 }
 
 export function HomePage() {
@@ -59,13 +77,14 @@ export function HomePage() {
   }, [q, petType, breed]);
 
   // Idle browsing (no search, no pet/breed filter) doesn't need to show the
-  // whole ~450-entry database at once — a random taste of what's in here is
-  // plenty, and leaves room for other homepage content later. An actual
+  // whole ~450-entry database at once — a random taste of the most dangerous
+  // things for dogs and cats is plenty (random "Unknown" entries tell the
+  // visitor nothing), and leaves room for other homepage content later. An actual
   // search or pet/breed filter is need-driven, so those still show every
   // real match.
   const isBrowsing = !q && !petType && !breed;
   const visibleThings = useMemo(
-    () => (isBrowsing ? randomSample(things, RANDOM_SAMPLE_SIZE) : things),
+    () => (isBrowsing ? featuredSample(things, RANDOM_SAMPLE_SIZE) : things),
     [things, isBrowsing],
   );
 

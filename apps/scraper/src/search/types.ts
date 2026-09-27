@@ -16,6 +16,8 @@ export interface CandidateDocument {
   sourceUrl: string;
   source: string;
   topic: string;
+  /** Set when filling in an existing entry: the pet types it has no known severity for. */
+  focusPetTypeIds?: string[];
 }
 
 export function documentFromHits(topic: string, hits: SearchHit[]): CandidateDocument | null {

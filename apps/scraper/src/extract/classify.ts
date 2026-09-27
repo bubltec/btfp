@@ -27,8 +27,13 @@ export const CLASSIFY_SYSTEM_PROMPT = [
 ].join('\n');
 
 function buildPrompt(document: CandidateDocument): string {
+  const focus = document.focusPetTypeIds?.length
+    ? `This is an existing catalog entry with no known severity for: ${document.focusPetTypeIds.join(', ')}. ` +
+      'Give a severity for each of those the sources cover.\n\n'
+    : '';
   return (
     `Candidate topic: ${document.title}\n\n` +
+    focus +
     `Search results (numbered; cite nothing that is not here):\n${document.body}`
   );
 }

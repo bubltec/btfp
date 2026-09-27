@@ -94,6 +94,7 @@ describe('writeContribution', () => {
           name: 'Chocolate / cocoa',
           thingTypeId: 'food',
           otherNames: [],
+          petTypes: [],
         },
       ],
     );

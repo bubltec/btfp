@@ -1,6 +1,7 @@
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 import type { SearchClient } from '../search/types.js';
 import type { TrendTopic } from '../trends/types.js';
+import { isSeedDue, nextSeedState, type SeedStateStore } from './seed-state.js';
 
 /**
  * Queries aimed straight at hazard news and poison-control content. Trending Now surfaces
@@ -25,10 +26,16 @@ export async function discoverFromSearch(
   search: SearchClient,
   client: BedrockRuntimeClient,
   modelId: string,
-  opts: { seeds?: string[]; maxResults: number },
+  opts: { seeds?: string[]; maxResults: number; seedState?: SeedStateStore; now?: Date },
 ): Promise<TrendTopic[]> {
   const found = new Map<string, TrendTopic>();
+  const now = opts.now ?? new Date();
   for (const query of opts.seeds ?? SEED_QUERIES) {
+    const prev = await opts.seedState?.get(query);
+    if (!isSeedDue(prev, now)) {
+      console.log(`Seed "${query}" backing off until ${prev?.nextSearchAt}.`);
+      continue;
+    }
     let hits;
     try {
       hits = await search.search(query, opts.maxResults);
@@ -37,6 +44,20 @@ export async function discoverFromSearch(
       continue;
     }
     if (hits.length === 0) continue;
+    // The same pages give the same names, which are all already researched, so skip the
+    // extraction and search this query less often until it turns up something new.
+    if (opts.seedState) {
+      const { state, fresh } = nextSeedState(
+        prev,
+        hits.map((h) => h.url),
+        now,
+      );
+      await opts.seedState.put(query, state);
+      if (!fresh) {
+        console.log(`Seed "${query}" returned no new pages (${state.staleRuns} runs in a row).`);
+        continue;
+      }
+    }
     const text = hits.map((h, i) => `[${i + 1}] ${h.title}\n${h.text}`).join('\n\n');
     try {
       const response = await client.send(
