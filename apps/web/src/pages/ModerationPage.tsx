@@ -1,10 +1,41 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { FieldChange, PendingContributionCard, User } from '@btfp/shared-types';
 import { api } from '../lib/api.js';
 import { isNonProdHost } from '../lib/env.js';
 import { useCurrentUser } from '../lib/useCurrentUser.js';
 import { EmailSignInDialog } from '../components/EmailSignInDialog.js';
+
+type Confidence = 'high' | 'medium' | 'low' | 'unknown';
+type ConfidenceFilter = 'all' | Confidence;
+
+const CONFIDENCE_FILTERS: { id: ConfidenceFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'high', label: 'High' },
+  { id: 'medium', label: 'Medium' },
+  { id: 'low', label: 'Low' },
+  { id: 'unknown', label: 'Unknown' },
+];
+
+const CONFIDENCE_STYLE: Record<Confidence, string> = {
+  high: 'bg-leaf-100 text-leaf-600',
+  medium: 'bg-paw-100 text-paw-600',
+  low: 'bg-alert-100 text-alert-600',
+  unknown: 'bg-neutral-100 text-neutral-500',
+};
+
+function cardKey(item: PendingContributionCard): string {
+  return item.SK ?? item.id ?? item.payload.name;
+}
+
+function cardConfidence(item: PendingContributionCard): Confidence {
+  const raw = item.payload.details?.confidence;
+  return raw === 'high' || raw === 'medium' || raw === 'low' ? raw : 'unknown';
+}
+
+function thingIdFromCard(item: PendingContributionCard): string {
+  return item.PK!.replace('THING#', '');
+}
 
 const CHANGE_STYLE: Record<FieldChange['kind'], string> = {
   added: 'text-leaf-600',
@@ -78,13 +109,20 @@ function ContributionsSection() {
   const [items, setItems] = useState<PendingContributionCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [confidenceFilter, setConfidenceFilter] = useState<ConfidenceFilter>('all');
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [busy, setBusy] = useState<string | null>(null);
 
   function load() {
     setLoading(true);
     setError(null);
     api
       .listPendingContributions()
-      .then(setItems)
+      .then((next) => {
+        setItems(next);
+        const keys = new Set(next.map(cardKey));
+        setSelected((prev) => new Set([...prev].filter((key) => keys.has(key))));
+      })
       .catch((err: unknown) => {
         setItems([]);
         setError(err instanceof Error ? err.message : 'Could not load pending contributions');
@@ -96,72 +134,233 @@ function ContributionsSection() {
     load();
   }, []);
 
-  async function reject(item: PendingContributionCard) {
-    if (!window.confirm(`Reject "${item.payload.name}"? It will leave the queue.`)) return;
-    try {
-      await api.rejectContribution(item.PK!.replace('THING#', ''), item.SK!);
-      load();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Reject failed');
-    }
+  const counts = useMemo(() => {
+    const next = { all: items.length, high: 0, medium: 0, low: 0, unknown: 0 };
+    for (const item of items) next[cardConfidence(item)] += 1;
+    return next;
+  }, [items]);
+
+  const visible = useMemo(
+    () =>
+      confidenceFilter === 'all'
+        ? items
+        : items.filter((item) => cardConfidence(item) === confidenceFilter),
+    [items, confidenceFilter],
+  );
+
+  const selectedVisible = visible.filter((item) => selected.has(cardKey(item)));
+  const allVisibleSelected = visible.length > 0 && selectedVisible.length === visible.length;
+
+  function toggle(item: PendingContributionCard) {
+    const key = cardKey(item);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function selectAllVisible() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const item of visible) next.add(cardKey(item));
+      return next;
+    });
+  }
+
+  function selectNoneVisible() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const item of visible) next.delete(cardKey(item));
+      return next;
+    });
   }
 
   async function approve(item: PendingContributionCard) {
-    try {
-      await api.approveContribution(item.PK!.replace('THING#', ''), item.SK!);
-      load();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Approve failed');
+    await api.approveContribution(thingIdFromCard(item), item.SK!);
+  }
+
+  async function reject(item: PendingContributionCard) {
+    await api.rejectContribution(thingIdFromCard(item), item.SK!);
+  }
+
+  async function runBatch(targets: PendingContributionCard[], action: 'approve' | 'reject') {
+    if (targets.length === 0) return;
+    if (action === 'reject') {
+      const label =
+        targets.length === 1 ? `"${targets[0]!.payload.name}"` : `${targets.length} selected items`;
+      if (!window.confirm(`Reject ${label}? They will leave the queue.`)) return;
     }
+
+    setError(null);
+    const verb = action === 'approve' ? 'Approving' : 'Rejecting';
+    const failed: string[] = [];
+    for (let i = 0; i < targets.length; i++) {
+      const item = targets[i]!;
+      setBusy(`${verb} ${i + 1} of ${targets.length}…`);
+      try {
+        if (action === 'approve') await approve(item);
+        else await reject(item);
+      } catch (err: unknown) {
+        failed.push(`${item.payload.name}: ${err instanceof Error ? err.message : 'failed'}`);
+      }
+    }
+    setBusy(null);
+    if (failed.length) setError(failed.join(' · '));
+    load();
   }
 
   return (
     <section>
-      <h2 className="text-xl font-bold text-neutral-800">Pending contributions</h2>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <h2 className="text-xl font-bold text-neutral-800">Pending contributions</h2>
+        {!loading && items.length > 0 && (
+          <p className="text-sm text-neutral-500">
+            {visible.length === items.length
+              ? `${items.length} in queue`
+              : `${visible.length} of ${items.length} shown`}
+            {selectedVisible.length > 0 ? ` · ${selectedVisible.length} selected` : ''}
+          </p>
+        )}
+      </div>
       {error && <p className="mt-4 text-sm text-alert-600">{error}</p>}
+      {busy && <p className="mt-2 text-sm text-neutral-500">{busy}</p>}
       {loading ? (
         <p className="mt-4 text-neutral-400">Loading…</p>
       ) : items.length === 0 && !error ? (
         <p className="mt-4 text-neutral-400">Nothing pending. 🎉</p>
       ) : (
-        <ul className="mt-4 space-y-3">
-          {items.map((item) => (
-            <li
-              key={item.SK ?? item.id}
-              className="rounded-cozy border border-paw-200 bg-white p-4"
+        <>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+              Confidence
+            </span>
+            {CONFIDENCE_FILTERS.map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                aria-pressed={confidenceFilter === filter.id}
+                onClick={() => setConfidenceFilter(filter.id)}
+                className={`rounded-full px-3 py-1 text-sm font-semibold ${
+                  confidenceFilter === filter.id
+                    ? 'bg-paw-500 text-white'
+                    : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                }`}
+              >
+                {filter.label} ({counts[filter.id]})
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={selectAllVisible}
+              disabled={visible.length === 0 || allVisibleSelected || Boolean(busy)}
+              className="rounded-full border border-paw-200 px-3 py-1.5 text-sm font-semibold text-neutral-700 hover:bg-paw-50 disabled:opacity-50"
             >
-              {item.thingId ? (
-                <p className="text-xs font-semibold tracking-wide text-paw-500 uppercase">
-                  Edit →{' '}
-                  <Link to={`/things/${item.thingId}`} className="underline">
-                    view live entry
-                  </Link>
-                </p>
-              ) : (
-                <p className="text-xs font-semibold tracking-wide text-leaf-600 uppercase">
-                  New entry
-                </p>
-              )}
-              <p className="font-semibold text-neutral-800">{item.payload.name}</p>
-              <p className="text-sm text-neutral-500 capitalize">{item.payload.thingTypeId}</p>
-              <ChangeList card={item} />
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={() => approve(item)}
-                  className="rounded-full bg-leaf-400 px-4 py-1.5 text-sm font-semibold text-white hover:bg-leaf-600"
-                >
-                  Approve
-                </button>
-                <button
-                  onClick={() => reject(item)}
-                  className="rounded-full bg-alert-100 px-4 py-1.5 text-sm font-semibold text-alert-600 hover:bg-alert-100/80"
-                >
-                  Reject
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+              Select all
+            </button>
+            <button
+              type="button"
+              onClick={selectNoneVisible}
+              disabled={selectedVisible.length === 0 || Boolean(busy)}
+              className="rounded-full border border-paw-200 px-3 py-1.5 text-sm font-semibold text-neutral-700 hover:bg-paw-50 disabled:opacity-50"
+            >
+              Select none
+            </button>
+            <button
+              type="button"
+              onClick={() => runBatch(selectedVisible, 'approve')}
+              disabled={selectedVisible.length === 0 || Boolean(busy)}
+              className="rounded-full bg-leaf-400 px-4 py-1.5 text-sm font-semibold text-white hover:bg-leaf-600 disabled:opacity-50"
+            >
+              Approve selected
+            </button>
+            <button
+              type="button"
+              onClick={() => runBatch(selectedVisible, 'reject')}
+              disabled={selectedVisible.length === 0 || Boolean(busy)}
+              className="rounded-full bg-alert-100 px-4 py-1.5 text-sm font-semibold text-alert-600 hover:bg-alert-100/80 disabled:opacity-50"
+            >
+              Reject selected
+            </button>
+          </div>
+          {visible.length === 0 ? (
+            <p className="mt-4 text-neutral-400">No items match this confidence filter.</p>
+          ) : (
+            <ul className="mt-4 space-y-3">
+              {visible.map((item) => {
+                const key = cardKey(item);
+                const checked = selected.has(key);
+                const confidence = cardConfidence(item);
+                return (
+                  <li
+                    key={key}
+                    className={`rounded-cozy border bg-white p-4 ${
+                      checked ? 'border-paw-400' : 'border-paw-200'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 accent-paw-500"
+                        checked={checked}
+                        disabled={Boolean(busy)}
+                        onChange={() => toggle(item)}
+                        aria-label={`Select ${item.payload.name}`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        {item.thingId ? (
+                          <p className="text-xs font-semibold tracking-wide text-paw-500 uppercase">
+                            Edit →{' '}
+                            <Link to={`/things/${item.thingId}`} className="underline">
+                              view live entry
+                            </Link>
+                          </p>
+                        ) : (
+                          <p className="text-xs font-semibold tracking-wide text-leaf-600 uppercase">
+                            New entry
+                          </p>
+                        )}
+                        <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-neutral-800">{item.payload.name}</p>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${CONFIDENCE_STYLE[confidence]}`}
+                          >
+                            {confidence}
+                          </span>
+                        </div>
+                        <p className="text-sm text-neutral-500 capitalize">
+                          {item.payload.thingTypeId}
+                        </p>
+                        <ChangeList card={item} />
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            disabled={Boolean(busy)}
+                            onClick={() => runBatch([item], 'approve')}
+                            className="rounded-full bg-leaf-400 px-4 py-1.5 text-sm font-semibold text-white hover:bg-leaf-600 disabled:opacity-50"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            disabled={Boolean(busy)}
+                            onClick={() => runBatch([item], 'reject')}
+                            className="rounded-full bg-alert-100 px-4 py-1.5 text-sm font-semibold text-alert-600 hover:bg-alert-100/80 disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </>
       )}
     </section>
   );

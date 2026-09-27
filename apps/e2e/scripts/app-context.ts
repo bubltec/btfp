@@ -113,11 +113,14 @@ test/verify call above before navigating here), in order:
   names vary) and the exact queue text. Wait for POST /api/contributions to
   finish before asserting — the handler scans the catalog for duplicates.
 
-/moderation page: each pending item has "Approve" and "Reject" buttons
-(getByRole('button', { name: /^approve$/i }) / /^reject$/i). Reject triggers
-a native browser prompt() for an optional reason — Playwright needs a
+/moderation page: the contributions queue has confidence filters, Select
+all / Select none, and "Approve selected" / "Reject selected". Each pending
+item still has per-card "Approve" and "Reject" buttons
+(getByRole('button', { name: /^approve$/i }) / /^reject$/i). Per-card Reject
+and Reject selected trigger a native confirm() dialog — Playwright needs a
 page.on('dialog', ...) handler registered before clicking Reject, or the
-test will hang waiting on it.
+test will hang waiting on it. Organization-verification Reject still uses
+prompt() for an optional reason.
 
 General conventions: prefer Playwright's role/label-based locators
 (getByRole, getByLabel, getByText) over CSS selectors, matching what's in
