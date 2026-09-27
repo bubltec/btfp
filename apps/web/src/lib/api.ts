@@ -52,10 +52,16 @@ export const api = {
   submitContribution: (payload: Record<string, unknown>, thingId?: string) =>
     request('/contributions', { method: 'POST', body: JSON.stringify({ thingId, payload }) }),
   listPendingContributions: () => request<PendingContributionCard[]>('/contributions/pending'),
-  rejectContribution: (thingId: string, sk: string, reason?: string) =>
-    request<{ rejected: number }>(`/contributions/${thingId}/${encodeURIComponent(sk)}/reject`, {
+  // The sort key contains '#', so it goes in the body; see ReviewContributionDto.
+  approveContribution: (thingId: string, sk: string) =>
+    request<Thing>(`/contributions/${encodeURIComponent(thingId)}/approve`, {
       method: 'POST',
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ sk }),
+    }),
+  rejectContribution: (thingId: string, sk: string, reason?: string) =>
+    request<{ rejected: number }>(`/contributions/${encodeURIComponent(thingId)}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ sk, reason }),
     }),
   unlockDevContributor: () =>
     request<{ verifiedContributor: boolean }>('/auth/test/verify', { method: 'POST' }),

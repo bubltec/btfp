@@ -1,10 +1,9 @@
 import type { SearchClient, SearchHit } from './search/types.js';
 
 /** Angles that make a single web search into a research pass over one candidate. */
-export function researchQueries(topic: string): string[] {
+export function researchQueries(topic: string, petTypeIds: string[] = ['dog', 'cat']): string[] {
   return [
-    `${topic} toxic to dogs`,
-    `${topic} toxic to cats`,
+    ...petTypeIds.map((id) => `${topic} toxic to ${id}s`),
     `${topic} pet poisoning symptoms treatment veterinarian`,
   ].map((q) => q.slice(0, 200));
 }
@@ -18,10 +17,11 @@ export async function researchTopic(
   topic: string,
   maxResultsPerQuery: number,
   maxHits = 10,
+  petTypeIds?: string[],
 ): Promise<SearchHit[]> {
   const seen = new Set<string>();
   const hits: SearchHit[] = [];
-  for (const query of researchQueries(topic)) {
+  for (const query of researchQueries(topic, petTypeIds)) {
     let results: SearchHit[];
     try {
       results = await search.search(query, maxResultsPerQuery);

@@ -15,4 +15,9 @@ describe('ContributionsController', () => {
     expect(src).toContain("from './dto/create-contribution.dto.js'");
     expect(src).not.toMatch(/import type \{ CreateContributionDto \}/);
   });
+
+  it('imports the review DTOs as values so approve/reject bodies are validated', () => {
+    const src = readFileSync(controllerPath, 'utf8');
+    expect(src).not.toMatch(/import type \{ (Reject|Review)ContributionDto \}/);
+  });
 });

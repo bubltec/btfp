@@ -4,8 +4,16 @@ import type { ScraperConfig } from './config.js';
 import { classifyDocument } from './extract/classify.js';
 import { triageTopics } from './extract/triage.js';
 import { discoverFromSearch } from './discover/seed-search.js';
+import { DynamoSeedStateStore } from './discover/seed-state.js';
+import {
+  fillsGap,
+  markEnriched,
+  rankEnrichmentTargets,
+  wasRecentlyEnriched,
+  type EnrichmentTarget,
+} from './enrich.js';
 import { researchTopic } from './research.js';
-import { loadTaxonomy, loadThingCatalog } from './taxonomy.js';
+import { loadTaxonomy, loadThingCatalog, type CatalogThing } from './taxonomy.js';
 import { isTopicProcessed, markTopicProcessed } from './seen.js';
 import { isFileableExtraction, writeContribution } from './contribution.js';
 import { GatewaySearchClient } from './search/gateway.js';
@@ -14,6 +22,7 @@ import { AgentCoreMemoryStore, NoopMemoryStore } from './memory/agentcore.js';
 import type { MemoryStore } from './memory/types.js';
 import { GoogleTrendsBrowserSource } from './trends/browser.js';
 import type { TrendSource, TrendTopic } from './trends/types.js';
+import type { Taxonomy } from './extract/types.js';
 
 export interface ScraperDeps {
   trends: TrendSource;
@@ -73,6 +82,7 @@ export async function run(
   );
   const discovered = await deps.discover(deps.search, bedrock, model, {
     maxResults: config.maxSearchResults,
+    seedState: new DynamoSeedStateStore(db),
   });
   const unique = new Map<string, TrendTopic>();
   for (const topic of [...relevant.map((term) => ({ term })), ...discovered]) {
@@ -98,11 +108,6 @@ export async function run(
       continue;
     }
     pending.push(topic);
-  }
-
-  if (pending.length === 0) {
-    console.log(`Run complete: ${topics.length} topics, ${skipped} skipped, 0 candidates written.`);
-    return;
   }
 
   const taxonomy = await loadTaxonomy(db);
@@ -136,7 +141,75 @@ export async function run(
     );
   }
 
+  // Discovery keeps finding what's already been researched, so the budget new topics didn't
+  // use goes to existing entries that still say "unknown" for some pets.
+  const enrichBudget = config.maxTopicsPerRun - pending.length;
+  const enriched =
+    enrichBudget > 0
+      ? await enrichCatalog(db, deps, bedrock, model, config, taxonomy, catalog, enrichBudget)
+      : { attempted: 0, filed: 0 };
+
   console.log(
-    `Run complete: ${topics.length} topics, ${skipped} skipped, ${candidateCount} candidates written.`,
+    `Run complete: ${topics.length} topics, ${skipped} skipped, ${candidateCount} candidates written; ` +
+      `${enriched.attempted} existing entries researched, ${enriched.filed} updates filed.`,
   );
+}
+
+async function enrichCatalog(
+  db: DynamoDBDocumentClient,
+  deps: ScraperDeps,
+  bedrock: BedrockRuntimeClient,
+  model: string,
+  config: ScraperConfig,
+  taxonomy: Taxonomy,
+  catalog: CatalogThing[],
+  budget: number,
+): Promise<{ attempted: number; filed: number }> {
+  const now = new Date();
+  const targets: EnrichmentTarget[] = [];
+  for (const target of rankEnrichmentTargets(catalog, taxonomy.petTypeIds)) {
+    if (targets.length >= budget) break;
+    if (await wasRecentlyEnriched(db, target.thing.id, now)) continue;
+    targets.push(target);
+  }
+
+  let filed = 0;
+  for (const target of targets) {
+    const { thing, gaps } = target;
+    const hits = await researchTopic(
+      deps.search,
+      thing.name,
+      config.maxSearchResults,
+      undefined,
+      gaps,
+    );
+    const document = documentFromHits(thing.name, hits);
+    if (!document) {
+      await markEnriched(db, target, 'No web-search hits.', now);
+      continue;
+    }
+
+    const extraction = await deps.classify(
+      bedrock,
+      model,
+      { ...document, focusPetTypeIds: gaps },
+      taxonomy,
+    );
+    if (!extraction || !fillsGap(extraction, gaps)) {
+      await markEnriched(db, target, 'No new severity found.', now);
+      continue;
+    }
+
+    // File against this entry by its own name and type, so a classifier rename can't turn
+    // an update into a new-thing proposal.
+    await writeContribution(
+      db,
+      document,
+      { ...extraction, thingName: thing.name, thingTypeId: thing.thingTypeId },
+      [thing],
+    );
+    filed += 1;
+    await markEnriched(db, target, 'Update filed.', now);
+  }
+  return { attempted: targets.length, filed };
 }
