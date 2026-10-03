@@ -8,13 +8,23 @@ const SYSTEM = [
   '(breeds, adoption, pet names). When unsure, exclude.',
 ].join('\n');
 
-/** Keeps only the trending terms worth researching. Fails closed: any error keeps nothing. */
+export interface TriageResult {
+  /** Terms worth researching. */
+  relevant: string[];
+  /** Terms the model explicitly ruled out. Safe to remember, so they are not judged again. */
+  rejected: string[];
+}
+
+/**
+ * Sorts trending terms into worth researching and not. Fails closed: any error keeps nothing,
+ * and rejects nothing either, so an outage does not permanently rule a term out.
+ */
 export async function triageTopics(
   client: BedrockRuntimeClient,
   modelId: string,
   terms: string[],
-): Promise<string[]> {
-  if (terms.length === 0) return [];
+): Promise<TriageResult> {
+  if (terms.length === 0) return { relevant: [], rejected: [] };
   try {
     const response = await client.send(
       new ConverseCommand({
@@ -65,10 +75,14 @@ export async function triageTopics(
       | undefined;
     const allowed = new Set(terms.map((t) => t.toLowerCase()));
     // Only accept terms we sent, so the model cannot introduce new topics here.
-    return (input?.decisions ?? [])
-      .filter((d) => d.couldHarmDogOrCat === true && allowed.has(String(d.topic).toLowerCase()))
-      .map((d) => String(d.topic));
+    const decisions = (input?.decisions ?? []).filter((d) =>
+      allowed.has(String(d.topic).toLowerCase()),
+    );
+    return {
+      relevant: decisions.filter((d) => d.couldHarmDogOrCat === true).map((d) => String(d.topic)),
+      rejected: decisions.filter((d) => d.couldHarmDogOrCat === false).map((d) => String(d.topic)),
+    };
   } catch {
-    return [];
+    return { relevant: [], rejected: [] };
   }
 }

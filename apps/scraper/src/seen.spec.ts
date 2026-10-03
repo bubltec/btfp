@@ -28,6 +28,17 @@ describe('seen', () => {
     expect(input?.ConditionExpression).toBe('attribute_not_exists(PK)');
   });
 
+  it('records why the topic was closed', async () => {
+    const db = mockAws(DynamoDBDocumentClient);
+    db.on(PutCommand).resolves({});
+    await markTopicProcessed(client(), 'birch sugar', 'duplicate', 'xylitol');
+    expect(db.commandCalls(PutCommand)[0]?.args[0].input.Item).toMatchObject({
+      PK: 'SCRAPERTREND#birch sugar',
+      outcome: 'duplicate',
+      duplicateOf: 'xylitol',
+    });
+  });
+
   it('swallows a ConditionalCheckFailedException', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     const err = new Error('conditional failed');

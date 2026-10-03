@@ -16,11 +16,29 @@ export async function isTopicProcessed(
   return Boolean(result.Item);
 }
 
+/** Why a term will not be looked at again. Kept on the marker for whoever debugs a skip. */
+export type TopicOutcome =
+  | 'filed'
+  | 'not_hazard'
+  | 'unusable'
+  | 'no_hits'
+  /** A trending term triage ruled out (sports, news, …). */
+  | 'triaged_out'
+  /** Already a catalog entry; `enrich.ts` fills its gaps. */
+  | 'in_catalog'
+  /** Another name for a topic researched earlier (`duplicateOf`). */
+  | 'duplicate';
+
 /**
  * Conditional put so a concurrent/retried run does not double-mark the same
  * term — ConditionalCheckFailedException just means someone else won.
  */
-export async function markTopicProcessed(db: DynamoDBDocumentClient, topic: string): Promise<void> {
+export async function markTopicProcessed(
+  db: DynamoDBDocumentClient,
+  topic: string,
+  outcome?: TopicOutcome,
+  duplicateOf?: string,
+): Promise<void> {
   try {
     await db.send(
       new PutCommand({
@@ -30,6 +48,8 @@ export async function markTopicProcessed(db: DynamoDBDocumentClient, topic: stri
           SK: 'META',
           topic,
           processedAt: new Date().toISOString(),
+          ...(outcome ? { outcome } : {}),
+          ...(duplicateOf ? { duplicateOf } : {}),
         },
         ConditionExpression: 'attribute_not_exists(PK)',
       }),

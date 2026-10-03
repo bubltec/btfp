@@ -8,7 +8,10 @@ export interface CatalogThing extends ThingIdentity {
   petTypes: PetToxicity[];
 }
 
-async function scanIds(db: DynamoDBDocumentClient, prefix: string): Promise<string[]> {
+async function scanTypes(
+  db: DynamoDBDocumentClient,
+  prefix: string,
+): Promise<{ id: string; name?: string }[]> {
   const result = await db.send(
     new ScanCommand({
       TableName: CONTENT_TABLE_NAME,
@@ -17,8 +20,12 @@ async function scanIds(db: DynamoDBDocumentClient, prefix: string): Promise<stri
     }),
   );
   return (result.Items ?? [])
-    .map((item) => (typeof item.id === 'string' ? item.id : undefined))
-    .filter((id): id is string => Boolean(id));
+    .filter((item): item is { id: string; name?: unknown } => typeof item.id === 'string')
+    .map((item) => ({ id: item.id, name: typeof item.name === 'string' ? item.name : undefined }));
+}
+
+function namesById(types: { id: string; name?: string }[]): Record<string, string> {
+  return Object.fromEntries(types.flatMap((type) => (type.name ? [[type.id, type.name]] : [])));
 }
 
 /**
@@ -29,14 +36,16 @@ async function scanIds(db: DynamoDBDocumentClient, prefix: string): Promise<stri
  * run either).
  */
 export async function loadTaxonomy(db: DynamoDBDocumentClient): Promise<Taxonomy> {
-  const [thingTypeIds, petTypeIds] = await Promise.all([
-    scanIds(db, 'THINGTYPE#'),
-    scanIds(db, 'PETTYPE#'),
+  const [thingTypes, petTypes] = await Promise.all([
+    scanTypes(db, 'THINGTYPE#'),
+    scanTypes(db, 'PETTYPE#'),
   ]);
 
   return {
-    thingTypeIds: thingTypeIds.length > 0 ? thingTypeIds : ['unknown'],
-    petTypeIds: petTypeIds.length > 0 ? petTypeIds : ['unknown'],
+    thingTypeIds: thingTypes.length > 0 ? thingTypes.map((type) => type.id) : ['unknown'],
+    petTypeIds: petTypes.length > 0 ? petTypes.map((type) => type.id) : ['unknown'],
+    thingTypeNames: namesById(thingTypes),
+    petTypeNames: namesById(petTypes),
   };
 }
 

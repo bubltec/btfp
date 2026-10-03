@@ -3,6 +3,9 @@ import type { Severity } from '@btfp/shared-types';
 export interface Taxonomy {
   thingTypeIds: string[];
   petTypeIds: string[];
+  /** Display names by id ("drug" → "Illicit & Recreational Drug"), for prompts. */
+  thingTypeNames?: Record<string, string>;
+  petTypeNames?: Record<string, string>;
 }
 
 export type Confidence = 'high' | 'medium' | 'low';
