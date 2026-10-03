@@ -1,8 +1,10 @@
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { normalizedPrimaryName } from '@btfp/shared-types';
 import type { ScraperConfig } from './config.js';
 import { classifyDocument } from './extract/classify.js';
 import { triageTopics } from './extract/triage.js';
+import { ideateTopics, ideationFocuses, nextIdeationFocus } from './discover/ideate.js';
 import { discoverFromSearch } from './discover/seed-search.js';
 import { DynamoSeedStateStore } from './discover/seed-state.js';
 import {
@@ -19,10 +21,11 @@ import { isFileableExtraction, writeContribution } from './contribution.js';
 import { GatewaySearchClient } from './search/gateway.js';
 import { documentFromHits, type SearchClient } from './search/types.js';
 import { AgentCoreMemoryStore, NoopMemoryStore } from './memory/agentcore.js';
-import type { MemoryStore } from './memory/types.js';
+import type { MemoryStore, ResearchRecord } from './memory/types.js';
+import { assessNovelty, judgeDuplicates } from './novelty.js';
 import { GoogleTrendsBrowserSource } from './trends/browser.js';
 import type { TrendSource, TrendTopic } from './trends/types.js';
-import type { Taxonomy } from './extract/types.js';
+import type { ExtractionResult, Taxonomy } from './extract/types.js';
 
 export interface ScraperDeps {
   trends: TrendSource;
@@ -31,6 +34,8 @@ export interface ScraperDeps {
   classify: typeof classifyDocument;
   triage: typeof triageTopics;
   discover: typeof discoverFromSearch;
+  judge: typeof judgeDuplicates;
+  ideate: typeof ideateTopics;
 }
 
 export function buildDeps(config: ScraperConfig): ScraperDeps {
@@ -51,7 +56,20 @@ export function buildDeps(config: ScraperConfig): ScraperDeps {
     classify: classifyDocument,
     triage: triageTopics,
     discover: discoverFromSearch,
+    judge: judgeDuplicates,
+    ideate: ideateTopics,
   };
+}
+
+/** Earlier research recalled to tell the model what a focus already covers. */
+const IDEATION_RECALL_LIMIT = 20;
+/** Suggestions asked for per open slot; some will turn out to be known under another name. */
+const IDEAS_PER_SLOT = 3;
+
+interface SkipCounts {
+  seen: number;
+  inCatalog: number;
+  duplicate: number;
 }
 
 export async function run(
@@ -75,74 +93,99 @@ export async function run(
   } catch (err) {
     console.warn(`Trends unavailable, continuing with search discovery: ${String(err)}`);
   }
-  const relevant = await deps.triage(
-    bedrock,
-    model,
-    trending.map((t) => t.term),
-  );
+  // The trend list barely changes between runs. Only terms never judged before go to the
+  // model, and the ones it rules out are remembered, so an unchanged list costs no call.
+  const unjudged: string[] = [];
+  for (const topic of trending) {
+    if (!(await isTopicProcessed(db, topic.term))) unjudged.push(topic.term);
+  }
+  const triaged = await deps.triage(bedrock, model, unjudged);
+  for (const term of triaged.rejected) await markTopicProcessed(db, term, 'triaged_out');
+
   const discovered = await deps.discover(deps.search, bedrock, model, {
     maxResults: config.maxSearchResults,
     seedState: new DynamoSeedStateStore(db),
   });
-  const unique = new Map<string, TrendTopic>();
-  for (const topic of [...relevant.map((term) => ({ term })), ...discovered]) {
-    const key = topic.term.trim().toLowerCase();
-    if (!unique.has(key)) unique.set(key, topic);
-  }
-  const topics = [...unique.values()];
+  const topics = uniqueTerms([...triaged.relevant, ...discovered.map((topic) => topic.term)]);
   console.log(
-    `Topics: ${trending.length} trending → ${relevant.length} relevant, ${discovered.length} from search; ${topics.length} unique; researching up to ${config.maxTopicsPerRun} new ones.`,
+    `Topics: ${trending.length} trending (${unjudged.length} not judged before) → ` +
+      `${triaged.relevant.length} relevant, ${discovered.length} from search; ` +
+      `${topics.length} unique; researching up to ${config.maxTopicsPerRun} new ones.`,
   );
-
-  const pending: typeof topics = [];
-  let skipped = 0;
-  for (const topic of topics) {
-    // Cap after filtering out seen topics. Capping first meant the same first N discovered
-    // topics were skipped every run and nothing new was ever researched.
-    if (pending.length >= config.maxTopicsPerRun) break;
-    if (
-      (await isTopicProcessed(db, topic.term)) ||
-      (await deps.memory.alreadyCollected(topic.term))
-    ) {
-      skipped += 1;
-      continue;
-    }
-    pending.push(topic);
-  }
 
   const taxonomy = await loadTaxonomy(db);
   const catalog = await loadThingCatalog(db);
+  const catalogNames = new Set(
+    catalog
+      .flatMap((thing) => [thing.name, ...(thing.otherNames ?? [])])
+      .map(normalizedPrimaryName),
+  );
+  const skipped: SkipCounts = { seen: 0, inCatalog: 0, duplicate: 0 };
+
+  /**
+   * Takes terms in order until `limit` of them are new. A term is closed without research
+   * when it was processed before, is already a catalog entry, or memory shows it is another
+   * name for something researched earlier. Each closes with a marker, so the next run drops
+   * it on the first, cheapest check.
+   */
+  const admit = async (terms: string[], limit: number): Promise<string[]> => {
+    const queue = [...terms];
+    const admitted: string[] = [];
+    // Capped after filtering. Capping first meant the same first N discovered topics were
+    // skipped every run and nothing new was ever researched.
+    while (admitted.length < limit && queue.length > 0) {
+      const batch: string[] = [];
+      while (batch.length < limit - admitted.length && queue.length > 0) {
+        const term = queue.shift()!;
+        if (await isTopicProcessed(db, term)) {
+          skipped.seen += 1;
+        } else if (catalogNames.has(normalizedPrimaryName(term))) {
+          await markTopicProcessed(db, term, 'in_catalog');
+          skipped.inCatalog += 1;
+        } else {
+          batch.push(term);
+        }
+      }
+      for (const verdict of await assessNovelty(deps.memory, deps.judge, bedrock, model, batch)) {
+        if (verdict.duplicateOf) {
+          console.log(`Skipping "${verdict.term}": same as "${verdict.duplicateOf}".`);
+          await markTopicProcessed(db, verdict.term, 'duplicate', verdict.duplicateOf);
+          skipped.duplicate += 1;
+        } else {
+          admitted.push(verdict.term);
+        }
+      }
+    }
+    return admitted;
+  };
+
+  const pending = await admit(topics, config.maxTopicsPerRun);
+
+  // Discovery mostly returns what is already known. When it leaves room, ask the model what
+  // the catalog is missing, one corner of it per run, instead of researching nothing new.
+  const ideaBudget = Math.min(config.maxIdeasPerRun, config.maxTopicsPerRun - pending.length);
+  let ideated: string[] = [];
+  if (ideaBudget > 0) {
+    ideated = await ideate(db, deps, bedrock, model, taxonomy, catalog, ideaBudget, admit);
+    pending.push(...ideated);
+  }
 
   let candidateCount = 0;
-  for (const topic of pending) {
-    const hits = await researchTopic(deps.search, topic.term, config.maxSearchResults);
-    const document = documentFromHits(topic.term, hits);
-    if (!document) {
-      await markTopicProcessed(db, topic.term);
-      await deps.memory.remember(topic.term, 'No web-search hits.');
-      continue;
-    }
-
-    const extraction = await deps.classify(bedrock, model, document, taxonomy);
-    const fileable = Boolean(extraction?.isPetHazardReport && isFileableExtraction(extraction));
-    if (fileable && extraction) {
+  for (const term of pending) {
+    const hits = await researchTopic(deps.search, term, config.maxSearchResults);
+    const document = documentFromHits(term, hits);
+    const extraction = document ? await deps.classify(bedrock, model, document, taxonomy) : null;
+    const record = researchRecord(term, Boolean(document), extraction);
+    if (document && extraction && record.outcome === 'filed') {
       await writeContribution(db, document, extraction, catalog);
       candidateCount += 1;
     }
-
-    await markTopicProcessed(db, topic.term);
-    await deps.memory.remember(
-      topic.term,
-      fileable && extraction
-        ? `Hazard candidate: ${extraction.thingName}. ${extraction.summary ?? ''}`
-        : extraction?.isPetHazardReport
-          ? 'Pet-hazard report without a usable name and type; not filed.'
-          : 'Not classified as a pet-hazard report.',
-    );
+    await markTopicProcessed(db, term, record.outcome === 'unknown' ? undefined : record.outcome);
+    await deps.memory.remember(record);
   }
 
-  // Discovery keeps finding what's already been researched, so the budget new topics didn't
-  // use goes to existing entries that still say "unknown" for some pets.
+  // Whatever budget new topics didn't use goes to existing entries that still say "unknown"
+  // for some pets.
   const enrichBudget = config.maxTopicsPerRun - pending.length;
   const enriched =
     enrichBudget > 0
@@ -150,9 +193,83 @@ export async function run(
       : { attempted: 0, filed: 0 };
 
   console.log(
-    `Run complete: ${topics.length} topics, ${skipped} skipped, ${candidateCount} candidates written; ` +
+    `Run complete: ${pending.length} topics researched (${ideated.length} suggested by the model), ` +
+      `${candidateCount} candidates written; skipped ${skipped.seen} seen before, ` +
+      `${skipped.inCatalog} already in the catalog, ${skipped.duplicate} duplicates; ` +
       `${enriched.attempted} existing entries researched, ${enriched.filed} updates filed.`,
   );
+}
+
+function uniqueTerms(terms: string[]): string[] {
+  const unique = new Map<string, string>();
+  for (const term of terms) {
+    const key = term.trim().toLowerCase();
+    if (!unique.has(key)) unique.set(key, term);
+  }
+  return [...unique.values()];
+}
+
+/** What memory keeps about one researched topic. */
+export function researchRecord(
+  term: string,
+  hadHits: boolean,
+  extraction: ExtractionResult | null,
+): ResearchRecord {
+  if (!hadHits) return { term, outcome: 'no_hits', summary: 'No web-search hits.' };
+  if (!extraction?.isPetHazardReport) {
+    return { term, outcome: 'not_hazard', summary: 'Not classified as a pet-hazard report.' };
+  }
+  const name = extraction.thingName?.trim() || undefined;
+  if (!isFileableExtraction(extraction)) {
+    return {
+      term,
+      name,
+      outcome: 'unusable',
+      summary: 'Pet-hazard report without a usable name, type or confidence; not filed.',
+    };
+  }
+  return { term, name, outcome: 'filed', summary: extraction.summary ?? 'Hazard candidate filed.' };
+}
+
+async function ideate(
+  db: DynamoDBDocumentClient,
+  deps: ScraperDeps,
+  bedrock: BedrockRuntimeClient,
+  model: string,
+  taxonomy: Taxonomy,
+  catalog: CatalogThing[],
+  budget: number,
+  admit: (terms: string[], limit: number) => Promise<string[]>,
+): Promise<string[]> {
+  const focus = await nextIdeationFocus(db, ideationFocuses(taxonomy));
+  if (!focus) return [];
+  const thingTypeName = taxonomy.thingTypeNames?.[focus.thingTypeId] ?? focus.thingTypeId;
+  const petTypeName = taxonomy.petTypeNames?.[focus.petTypeId] ?? focus.petTypeId;
+
+  // The catalog says what is published; memory adds what was researched and turned down,
+  // which the catalog cannot show and the model would otherwise suggest again.
+  const recalled = await deps.memory.recall(
+    `${thingTypeName} harmful to ${petTypeName}`,
+    IDEATION_RECALL_LIMIT,
+  );
+  const covered = [
+    ...catalog
+      .filter((thing) => thing.thingTypeId === focus.thingTypeId)
+      .map((thing) => thing.name),
+    ...recalled.flatMap((record) => [record.term, ...(record.name ? [record.name] : [])]),
+  ];
+  const ideas = await deps.ideate(bedrock, model, {
+    focus,
+    thingTypeName,
+    petTypeName,
+    covered,
+    count: budget * IDEAS_PER_SLOT,
+  });
+  const admitted = await admit(ideas, budget);
+  console.log(
+    `Ideation (${thingTypeName} / ${petTypeName}): ${ideas.length} suggested, ${admitted.length} new.`,
+  );
+  return admitted;
 }
 
 async function enrichCatalog(

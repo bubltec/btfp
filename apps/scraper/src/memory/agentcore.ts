@@ -1,9 +1,17 @@
+import { createHash } from 'node:crypto';
 import {
+  BatchCreateMemoryRecordsCommand,
   BedrockAgentCoreClient,
-  CreateEventCommand,
   RetrieveMemoryRecordsCommand,
+  type MemoryRecordSummary,
 } from '@aws-sdk/client-bedrock-agentcore';
-import { SCRAPER_MEMORY_ACTOR_ID, SCRAPER_MEMORY_NAMESPACE, type MemoryStore } from './types.js';
+import {
+  SCRAPER_MEMORY_NAMESPACE,
+  type MemoryStore,
+  type RecalledResearch,
+  type ResearchOutcome,
+  type ResearchRecord,
+} from './types.js';
 
 export interface AgentCoreMemoryOptions {
   memoryId: string;
@@ -11,11 +19,19 @@ export interface AgentCoreMemoryOptions {
   now?: () => Date;
 }
 
+const OUTCOMES: ResearchOutcome[] = ['filed', 'not_hazard', 'unusable', 'no_hits', 'unknown'];
+
 /**
- * Long-term semantic memory of topics this scraper has already researched,
- * so a term that keeps trending across 6h runs is not re-searched/re-billed.
- * Exact-term DynamoDB markers in `seen.ts` cover same-run / immediate skips;
- * this is the cross-run "looks like something we already have" layer.
+ * Long-term memory of what the scraper has already researched: one record per topic, written
+ * directly with `BatchCreateMemoryRecords`, with the term, hazard name and outcome as metadata.
+ *
+ * It does not use `CreateEvent`. Events go through the semantic strategy, where a model
+ * rewrites them into merged summaries ("…researching toxic foods (chocolate, grapes, xylitol,
+ * …)") minutes later. Those cost an extraction call per event, and a topic that is only
+ * mentioned inside another topic's summary looks already researched.
+ *
+ * Exact-term DynamoDB markers in `seen.ts` stop a repeat of the same term. This is the layer
+ * for a different term that means the same thing; `novelty.ts` decides what counts.
  */
 export class AgentCoreMemoryStore implements MemoryStore {
   private readonly memoryId: string;
@@ -28,66 +44,90 @@ export class AgentCoreMemoryStore implements MemoryStore {
     this.now = options.now ?? (() => new Date());
   }
 
-  async alreadyCollected(topic: string): Promise<boolean> {
+  async recall(query: string, limit: number): Promise<RecalledResearch[]> {
     try {
       const result = await this.client.send(
         new RetrieveMemoryRecordsCommand({
           memoryId: this.memoryId,
           namespace: SCRAPER_MEMORY_NAMESPACE,
-          maxResults: 5,
-          searchCriteria: { searchQuery: topic, topK: 5 },
+          maxResults: limit,
+          searchCriteria: { searchQuery: query.slice(0, 500), topK: limit },
         }),
       );
-      return (result.memoryRecordSummaries ?? []).some((record) =>
-        recordLooksLikeTopic(record.content?.text, topic),
-      );
+      return (result.memoryRecordSummaries ?? [])
+        .map(toRecalled)
+        .filter((record): record is RecalledResearch => record !== undefined)
+        .sort((a, b) => b.score - a.score);
     } catch (err) {
-      console.log(`AgentCore Memory retrieve failed for "${topic}":`, err);
-      return false;
+      // A memory outage must not block the run; the topic is researched as if it were new.
+      console.warn(`AgentCore Memory recall failed for "${query}": ${String(err)}`);
+      return [];
     }
   }
 
-  async remember(topic: string, summary: string): Promise<void> {
-    const now = this.now();
+  async remember(record: ResearchRecord): Promise<void> {
+    const name = record.name?.trim();
     try {
-      await this.client.send(
-        new CreateEventCommand({
+      const result = await this.client.send(
+        new BatchCreateMemoryRecordsCommand({
           memoryId: this.memoryId,
-          actorId: SCRAPER_MEMORY_ACTOR_ID,
-          sessionId: `run-${now.toISOString().slice(0, 13)}`,
-          eventTimestamp: now,
-          payload: [
+          records: [
             {
-              conversational: {
-                role: 'USER',
-                content: {
-                  text: `Collected pet-hazard research for trending topic "${topic}". ${summary}`.slice(
-                    0,
-                    4000,
-                  ),
-                },
+              requestIdentifier: requestId(record.term),
+              namespaces: [SCRAPER_MEMORY_NAMESPACE],
+              content: { text: recordText(record) },
+              timestamp: this.now(),
+              metadata: {
+                term: { stringValue: record.term.slice(0, 200) },
+                ...(name ? { name: { stringValue: name.slice(0, 200) } } : {}),
+                outcome: { stringValue: record.outcome },
               },
             },
           ],
         }),
       );
+      const failed = result.failedRecords?.[0];
+      if (failed) {
+        console.warn(
+          `AgentCore Memory rejected "${record.term}": ${failed.errorMessage ?? failed.errorCode}`,
+        );
+      }
     } catch (err) {
-      console.log(`AgentCore Memory remember failed for "${topic}":`, err);
+      console.warn(`AgentCore Memory remember failed for "${record.term}": ${String(err)}`);
     }
   }
 }
 
-export function recordLooksLikeTopic(text: string | undefined, topic: string): boolean {
-  if (!text) return false;
-  const haystack = text.toLowerCase();
-  const needle = topic.trim().toLowerCase();
-  if (needle.length < 3) return haystack.includes(needle);
-  return haystack.includes(needle);
+/** The text that gets embedded. The term and name lead so a search for either lands on it. */
+export function recordText(record: ResearchRecord): string {
+  const name = record.name?.trim();
+  return [`Researched topic: ${record.term}.`, name ? `Hazard: ${name}.` : '', record.summary]
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 2000);
+}
+
+function requestId(term: string): string {
+  return `topic-${createHash('sha256').update(term.trim().toLowerCase()).digest('hex').slice(0, 32)}`;
+}
+
+/** Records without a `term` are not ours (or predate this format) and are ignored. */
+function toRecalled(summary: MemoryRecordSummary): RecalledResearch | undefined {
+  const term = summary.metadata?.term?.stringValue;
+  if (!term) return undefined;
+  const outcome = summary.metadata?.outcome?.stringValue as ResearchOutcome | undefined;
+  return {
+    term,
+    name: summary.metadata?.name?.stringValue,
+    outcome: outcome && OUTCOMES.includes(outcome) ? outcome : 'unknown',
+    summary: summary.content?.text ?? '',
+    score: summary.score ?? 0,
+  };
 }
 
 export class NoopMemoryStore implements MemoryStore {
-  async alreadyCollected(): Promise<boolean> {
-    return false;
+  async recall(): Promise<RecalledResearch[]> {
+    return [];
   }
   async remember(): Promise<void> {}
 }

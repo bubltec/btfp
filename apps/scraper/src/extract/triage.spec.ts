@@ -23,14 +23,15 @@ describe('triageTopics', () => {
     const bedrock = mockAws(BedrockRuntimeClient);
     bedrock.on(ConverseCommand).resolves(reply(['Sago Palm', 'invented topic'], ['nfl scores']));
     const kept = await triageTopics(new BedrockRuntimeClient({}), 'm', ['nfl scores', 'sago palm']);
-    expect(kept).toEqual(['Sago Palm']);
+    expect(kept).toEqual({ relevant: ['Sago Palm'], rejected: ['nfl scores'] });
   });
 
-  it('fails closed on a Bedrock error and skips the call for an empty list', async () => {
+  it('fails closed on a Bedrock error, rejecting nothing, and skips the call for an empty list', async () => {
     const bedrock = mockAws(BedrockRuntimeClient);
     bedrock.on(ConverseCommand).rejects(new Error('throttled'));
-    expect(await triageTopics(new BedrockRuntimeClient({}), 'm', ['x'])).toEqual([]);
-    expect(await triageTopics(new BedrockRuntimeClient({}), 'm', [])).toEqual([]);
+    const nothing = { relevant: [], rejected: [] };
+    expect(await triageTopics(new BedrockRuntimeClient({}), 'm', ['x'])).toEqual(nothing);
+    expect(await triageTopics(new BedrockRuntimeClient({}), 'm', [])).toEqual(nothing);
     expect(bedrock.commandCalls(ConverseCommand)).toHaveLength(1);
   });
 });

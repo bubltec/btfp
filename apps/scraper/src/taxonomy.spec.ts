@@ -5,11 +5,11 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { loadTaxonomy } from './taxonomy.js';
 
 describe('loadTaxonomy', () => {
-  it('scans both PETTYPE# and THINGTYPE# prefixes and returns their ids', async () => {
+  it('scans both PETTYPE# and THINGTYPE# prefixes and returns their ids and display names', async () => {
     const db = mockAws(DynamoDBDocumentClient);
     db.on(ScanCommand, {
       ExpressionAttributeValues: { ':meta': 'META', ':prefix': 'THINGTYPE#' },
-    }).resolves({ Items: [{ id: 'plant' }, { id: 'food' }] });
+    }).resolves({ Items: [{ id: 'plant', name: 'Plant' }, { id: 'food' }] });
     db.on(ScanCommand, {
       ExpressionAttributeValues: { ':meta': 'META', ':prefix': 'PETTYPE#' },
     }).resolves({ Items: [{ id: 'dog' }, { id: 'cat' }] });
@@ -20,6 +20,8 @@ describe('loadTaxonomy', () => {
     expect(result).toEqual({
       thingTypeIds: ['plant', 'food'],
       petTypeIds: ['dog', 'cat'],
+      thingTypeNames: { plant: 'Plant' },
+      petTypeNames: {},
     });
   });
 
@@ -30,6 +32,6 @@ describe('loadTaxonomy', () => {
     const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
     const result = await loadTaxonomy(client);
 
-    expect(result).toEqual({ thingTypeIds: ['unknown'], petTypeIds: ['unknown'] });
+    expect(result).toMatchObject({ thingTypeIds: ['unknown'], petTypeIds: ['unknown'] });
   });
 });

@@ -67,10 +67,22 @@ export const GITHUB_CLIENT_SECRET_PARAM_NAME = '/btfp/github-client-secret';
 // needs this constant (and a CiStack redeploy) updated, same as here.
 export const GITHUB_REPO = 'bubltec@310348769/btfp@1301972078';
 
+export interface ScraperRunConfig {
+  /** Run once a week on a schedule. Off means the task only runs when started by hand. */
+  weekly: boolean;
+  /** Google Trends window in hours (4, 24, 48 or 168). Matches how often the task runs. */
+  trendsHours: number;
+  /** New topics plus existing-entry enrichments researched in one run. */
+  maxTopicsPerRun: number;
+  /** How many of those may be model-suggested topics when discovery leaves room. */
+  maxIdeasPerRun: number;
+}
+
 export interface EnvConfig {
   envName: 'dev' | 'prod';
   domainName: string;
   aliasDomainNames: string[];
+  scraper: ScraperRunConfig;
 }
 
 export const environments: Record<'dev' | 'prod', EnvConfig> = {
@@ -78,10 +90,15 @@ export const environments: Record<'dev' | 'prod', EnvConfig> = {
     envName: 'dev',
     domainName: `dev.${ROOT_DOMAIN}`,
     aliasDomainNames: [],
+    // Dev has no schedule: start the task by hand (docs/scraper.md) to try a change.
+    scraper: { weekly: false, trendsHours: 24, maxTopicsPerRun: 8, maxIdeasPerRun: 3 },
   },
   prod: {
     envName: 'prod',
     domainName: ROOT_DOMAIN,
     aliasDomainNames: [`www.${ROOT_DOMAIN}`],
+    // One run a week, so it reads the 7-day trend list and gets a bigger batch than the old
+    // 6-hourly runs had (8 each, up to 224 a week). 24 is about a tenth of that.
+    scraper: { weekly: true, trendsHours: 168, maxTopicsPerRun: 24, maxIdeasPerRun: 8 },
   },
 };

@@ -14,6 +14,8 @@ export interface ScraperConfig {
   trendsHours: number;
   trendsCategory: number;
   maxTopicsPerRun: number;
+  /** How many of those may be model-suggested topics when discovery leaves room. */
+  maxIdeasPerRun: number;
   maxSearchResults: number;
 }
 
@@ -36,6 +38,7 @@ export function loadConfig(): ScraperConfig {
     trendsHours: Number(process.env.TRENDS_HOURS ?? DEFAULT_TRENDS_HOURS),
     trendsCategory: Number(process.env.TRENDS_CATEGORY ?? DEFAULT_TRENDS_CATEGORY),
     maxTopicsPerRun: Number(process.env.MAX_TOPICS_PER_RUN ?? 8),
+    maxIdeasPerRun: Number(process.env.MAX_IDEAS_PER_RUN ?? 3),
     maxSearchResults: Number(process.env.MAX_SEARCH_RESULTS ?? 5),
   };
 }

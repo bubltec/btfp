@@ -21,11 +21,11 @@ export interface ScraperStackProps extends cdk.StackProps {
 }
 
 /**
- * Scheduled ECS Fargate task, not a long-running service — every 6h it
- * opens Google Trends (Pets and Animals) via AgentCore Browser, searches
- * new topics through AgentCore Gateway's Web Search tool, classifies hits
- * with Bedrock, and writes unverified Contribution items into the existing
- * moderation queue (never a verified Thing directly — see docs/scraper.md).
+ * ECS Fargate task, not a long-running service. Weekly in prod, started by hand in dev
+ * (`EnvConfig.scraper`). It opens Google Trends via AgentCore Browser, searches new topics
+ * through AgentCore Gateway's Web Search tool, classifies hits with Bedrock, and writes
+ * unverified Contribution items into the existing moderation queue (never a verified Thing
+ * directly — see docs/scraper.md).
  * No inbound traffic, so the VPC has only public subnets and no NAT
  * gateway — near-zero extra cost. assignPublicIp is required on the task
  * below as the direct consequence of that: with no NAT gateway, a task
@@ -36,6 +36,7 @@ export class ScraperStack extends cdk.Stack {
     super(scope, id, props);
 
     const envName = props.envConfig.envName;
+    const scraper = props.envConfig.scraper;
 
     const gatewayRole = new iam.Role(this, 'GatewayRole', {
       assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'),
@@ -100,6 +101,10 @@ export class ScraperStack extends cdk.Stack {
         Description: 'Remembers trending topics the scraper has already researched',
         EventExpiryDuration: 365,
         MemoryExecutionRoleArn: memoryRole.roleArn,
+        // The scraper writes its records directly (BatchCreateMemoryRecords) and no longer
+        // sends events, so this strategy extracts nothing and costs nothing. It stays because
+        // removing it is an in-place change to a resource that holds data, and nothing is
+        // gained by risking that.
         MemoryStrategies: [
           {
             SemanticMemoryStrategy: {
@@ -164,11 +169,11 @@ export class ScraperStack extends cdk.Stack {
 
     taskDef.taskRole.addToPrincipalPolicy(
       new iam.PolicyStatement({
+        // One record per researched topic, written and searched directly. No CreateEvent:
+        // events are what the strategy summarizes (apps/scraper/src/memory/agentcore.ts).
         actions: [
-          'bedrock-agentcore:CreateEvent',
+          'bedrock-agentcore:BatchCreateMemoryRecords',
           'bedrock-agentcore:RetrieveMemoryRecords',
-          'bedrock-agentcore:ListMemoryRecords',
-          'bedrock-agentcore:GetMemoryRecord',
         ],
         resources: [memory.getAtt('MemoryArn').toString()],
       }),
@@ -190,24 +195,35 @@ export class ScraperStack extends cdk.Stack {
         BEDROCK_INFERENCE_PROFILE_ID: SCRAPER_BEDROCK_INFERENCE_PROFILE_ID,
         AGENTCORE_GATEWAY_URL: gateway.getAtt('GatewayUrl').toString(),
         AGENTCORE_MEMORY_ID: memory.getAtt('MemoryId').toString(),
+        TRENDS_HOURS: String(scraper.trendsHours),
+        MAX_TOPICS_PER_RUN: String(scraper.maxTopicsPerRun),
+        MAX_IDEAS_PER_RUN: String(scraper.maxIdeasPerRun),
       },
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'scraper', logGroup }),
     });
 
-    const rule = new events.Rule(this, 'ScheduleRule', {
-      schedule: events.Schedule.rate(cdk.Duration.hours(6)),
+    if (scraper.weekly) {
+      // Monday 14:00 UTC (morning in the US), so new candidates are waiting at the start of
+      // the week. Same construct id as the old 6-hourly rule, so this updates it in place.
+      const rule = new events.Rule(this, 'ScheduleRule', {
+        schedule: events.Schedule.cron({ weekDay: 'MON', hour: '14', minute: '0' }),
+      });
+
+      rule.addTarget(
+        new targets.EcsTask({
+          cluster,
+          taskDefinition: taskDef,
+          subnetSelection: { subnetType: ec2.SubnetType.PUBLIC },
+          assignPublicIp: true,
+          taskCount: 1,
+        }),
+      );
+    }
+
+    // What `aws ecs run-task` needs to start it by hand (docs/scraper.md).
+    new cdk.CfnOutput(this, 'PublicSubnetIds', {
+      value: vpc.publicSubnets.map((subnet) => subnet.subnetId).join(','),
     });
-
-    rule.addTarget(
-      new targets.EcsTask({
-        cluster,
-        taskDefinition: taskDef,
-        subnetSelection: { subnetType: ec2.SubnetType.PUBLIC },
-        assignPublicIp: true,
-        taskCount: 1,
-      }),
-    );
-
     new cdk.CfnOutput(this, 'ClusterArn', { value: cluster.clusterArn });
     new cdk.CfnOutput(this, 'TaskDefinitionArn', { value: taskDef.taskDefinitionArn });
     new cdk.CfnOutput(this, 'GatewayUrl', { value: gateway.getAtt('GatewayUrl').toString() });

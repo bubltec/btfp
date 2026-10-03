@@ -27,7 +27,8 @@ deploy gets done, just no longer the routine way changes ship.
 - **`BtfpDev`** / **`BtfpProd`** — CDK Stages, each composing:
   - **Data** — DynamoDB `Content` + `Users` tables, on-demand billing.
   - **Scraper** — a VPC (public subnets only, no NAT gateway), an ECS cluster, one
-    Fargate task definition on an EventBridge schedule (every 6h), plus an AgentCore
+    Fargate task definition (weekly EventBridge schedule in prod; started by hand in dev),
+    plus an AgentCore
     Gateway (Web Search) and AgentCore Memory. The task reads Google Trends via
     AgentCore Browser and writes unverified `Contribution`s — see
     [docs/scraper.md](./scraper.md).
@@ -88,10 +89,10 @@ transform. The behavior is covered by `infra/cdk/lib/lambda-canary.spec.ts`.
 | WAF (2 rule groups)                                                       | ~$6-8/mo                                                                |
 | SES                                                                       | ~free — $0.10/1,000 emails, and this only sends verification codes      |
 | Bedrock (Haiku for domain classification; Sonnet for scraper research)    | ~free for Haiku; scraper Sonnet is cents per run                        |
-| AgentCore Web Search (scraper: ≤5 discovery + ≤4 per topic or enrichment, 8/run, 4 runs/day) | ~$10-35/mo per env at $7/1,000 queries (stale discovery queries back off) |
-| AgentCore Browser + Memory (scraper)                                      | pennies at this cadence                                                 |
+| AgentCore Web Search (scraper: ≤5 discovery + ≤4 per topic or enrichment, 24/run, 1 run/week in prod) | ~$3/mo for prod at $7/1,000 queries; dev only when run by hand |
+| AgentCore Browser + Memory (scraper)                                      | pennies at this cadence (memory records are written directly, no extraction calls) |
 | Brave Search (optional, org-legitimacy signal)                            | free tier covers this app's volume                                      |
-| ECS Fargate (scraper, ~5min/run, every 6h)                                | ~$1-2/mo per env                                                        |
+| ECS Fargate (scraper, ~10min/run, weekly in prod)                         | cents per month                                                         |
 | VPC (scraper, public-only, no NAT)                                        | free                                                                    |
 
 Dev + prod together should land well under $50/mo unless traffic spikes hard. The two
