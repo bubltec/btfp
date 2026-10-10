@@ -102,3 +102,6 @@ export const environments: Record<'dev' | 'prod', EnvConfig> = {
     scraper: { weekly: true, trendsHours: 168, maxTopicsPerRun: 24, maxIdeasPerRun: 8 },
   },
 };
+
+/** SSM parameter the dotio repo's DotioWaf stack publishes the shared web ACL ARN to (prod only). */
+export const WAF_ARN_PARAMETER = '/bubbletech/waf/web-acl-arn';

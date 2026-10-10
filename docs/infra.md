@@ -86,7 +86,7 @@ transform. The behavior is covered by `infra/cdk/lib/lambda-canary.spec.ts`.
 | Lambda + API Gateway                                                      | ~free under ~1M requests/mo                                             |
 | DynamoDB (on-demand)                                                      | pennies at this scale                                                   |
 | CloudFront                                                                | pennies at this scale                                                   |
-| WAF (2 rule groups)                                                       | ~$6-8/mo                                                                |
+| WAF (dev ACL only; prod uses the shared ACL from the dotio repo)          | ~$6-8/mo for dev, prod's share of the shared ACL is ~$1/mo (one rule)   |
 | SES                                                                       | ~free — $0.10/1,000 emails, and this only sends verification codes      |
 | Bedrock (Haiku for domain classification; Sonnet for scraper research)    | ~free for Haiku; scraper Sonnet is cents per run                        |
 | AgentCore Web Search (scraper: ≤5 discovery + ≤4 per topic or enrichment, 24/run, 1 run/week in prod) | ~$3/mo for prod at $7/1,000 queries; dev only when run by hand |
@@ -96,8 +96,9 @@ transform. The behavior is covered by `infra/cdk/lib/lambda-canary.spec.ts`.
 | VPC (scraper, public-only, no NAT)                                        | free                                                                    |
 
 Dev + prod together should land well under $50/mo unless traffic spikes hard. The two
-biggest levers if it doesn't: drop WAF's rate-limit rule, or merge dev+prod's WAF into a
-single shared WebACL.
+biggest levers if it doesn't: drop dev's WAF rate-limit rule, or drop dev's separate WebACL.
+Prod already attaches the shared WebACL owned by the dotio repo (`DotioWaf`, ARN read from
+SSM `/bubbletech/waf/web-acl-arn`); deploy that first.
 
 ## SES sandbox
 
