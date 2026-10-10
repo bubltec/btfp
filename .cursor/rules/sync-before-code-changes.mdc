@@ -35,3 +35,18 @@ Before **any** file edit, commit, or new branch work:
    rather than stashing over it.
 
 Only edit files once the branch is aligned with intent.
+7. **Open work guard (before creating any new branch).** A new branch cut from
+   `origin/main` cannot see work that is open but unmerged, so two PRs that touch the
+   same files conflict once the first merges. Before `git checkout -b`:
+   - List open work in this repo: `gh pr list --state open --json number,headRefName,files`
+     and `git branch -r --no-merged origin/main`.
+   - Compare the files you are about to change (`git diff --name-only`, or the files you
+     plan to edit) against the files in every open PR.
+   - **Overlap, or the change builds on open work**: add it to that branch, or branch from
+     it and say in the PR that it is stacked. Never branch from `main` for it.
+   - **No overlap**: branch from `origin/main`, and tell the user which open PRs you checked.
+   - Several changes that touch the same file (for example adding a test next to the same
+     neighbour): land them on one branch, or stack them in order.
+   - If a PR you opened later reports `CONFLICTING`, merge `origin/main` into that branch
+     and keep both sides; do not force-push.
+   - This applies in sibling repos too (`../greed`, `../badthingsforpets`, `../political-sloth`).
