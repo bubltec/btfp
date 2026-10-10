@@ -153,6 +153,19 @@ export class ApiStack extends cdk.Stack {
       defaultIntegration: new HttpLambdaIntegration('BffIntegration', current),
     });
 
+    // Server-side ceiling on the whole API, whatever the number of client IPs (the WAF
+    // rate limit is per IP, so a spread-out flood slips under it). Over the limit,
+    // API Gateway answers 429 before the Lambda runs, which caps Lambda and DynamoDB cost.
+    const defaultStage = this.httpApi.defaultStage?.node.defaultChild as
+      | apigwv2.CfnStage
+      | undefined;
+    if (defaultStage) {
+      defaultStage.defaultRouteSettings = {
+        throttlingRateLimit: 50,
+        throttlingBurstLimit: 100,
+      };
+    }
+
     if (isProd) {
       // The canary alarms only guard a deploy. This one notifies on 5xx in
       // steady state. The email subscription must be confirmed once by the
