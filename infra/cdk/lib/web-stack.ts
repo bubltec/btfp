@@ -6,6 +6,7 @@ import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as targets from 'aws-cdk-lib/aws-route53-targets';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
@@ -17,6 +18,7 @@ import {
   DEV_BASIC_AUTH_USER,
   HOSTED_ZONE_ID,
   ROOT_DOMAIN,
+  WAF_ARN_PARAMETER,
 } from './config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -131,16 +133,25 @@ export class WebStack extends cdk.Stack {
       });
     }
 
-    const webAcl = new wafv2.CfnWebACL(this, 'WebAcl', {
-      scope: 'CLOUDFRONT',
-      defaultAction: { allow: {} },
-      visibilityConfig: {
-        cloudWatchMetricsEnabled: true,
-        metricName: `btfp-${props.envConfig.envName}-waf`,
-        sampledRequestsEnabled: true,
-      },
-      rules,
-    });
+    // Prod attaches the shared ACL owned by the dotio repo (DotioWaf: one ACL for every
+    // bubbletech site, with a Host-scoped rate limit for this one). Dev keeps its own
+    // ACL because of the Basic Auth rule above, which must not touch prod traffic.
+    let webAclId: string;
+    if (isProd) {
+      webAclId = ssm.StringParameter.valueForStringParameter(this, WAF_ARN_PARAMETER);
+    } else {
+      const webAcl = new wafv2.CfnWebACL(this, 'WebAcl', {
+        scope: 'CLOUDFRONT',
+        defaultAction: { allow: {} },
+        visibilityConfig: {
+          cloudWatchMetricsEnabled: true,
+          metricName: `btfp-${props.envConfig.envName}-waf`,
+          sampledRequestsEnabled: true,
+        },
+        rules,
+      });
+      webAclId = webAcl.attrArn;
+    }
 
     // Extra layer for any crawler that (a) somehow has valid dev credentials
     // and (b) actually respects these signals: tell it not to index anyway.
@@ -262,7 +273,7 @@ export class WebStack extends cdk.Stack {
       },
       domainNames: allDomainNames,
       certificate,
-      webAclId: webAcl.attrArn,
+      webAclId,
       defaultRootObject: 'index.html',
     });
 
