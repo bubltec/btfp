@@ -9,6 +9,7 @@ import { corsOrigin, isProduction } from './env.js';
 import { JsonLogger } from './logging/json-logger.js';
 import { StageErrorFilter } from './filters/stage-error.filter.js';
 import { VALIDATION_PIPE_OPTIONS } from './validation.js';
+import { isPublicCacheable, PUBLIC_CACHE_CONTROL } from './public-cache.js';
 
 export async function createApp(adapter: FastifyAdapter): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
@@ -35,6 +36,20 @@ export async function createApp(adapter: FastifyAdapter): Promise<NestFastifyApp
       patchable.setHeader = reply.raw.setHeader.bind(reply.raw);
       patchable.end = reply.raw.end.bind(reply.raw);
       done();
+    });
+
+  // Public, unauthenticated reads are cached at CloudFront (see infra/cdk web-stack.ts).
+  // CloudFront only honors stale-while-revalidate / stale-if-error from the origin's own
+  // Cache-Control, so the BFF sets it, and only on successful GETs of those paths:
+  // errors and everything else are never made cacheable.
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onSend', (request, reply, payload, done) => {
+      if (isPublicCacheable(request.method, request.url, reply.statusCode)) {
+        reply.header('cache-control', PUBLIC_CACHE_CONTROL);
+      }
+      done(null, payload);
     });
 
   app.enableCors({ origin: corsOrigin(), credentials: true });
