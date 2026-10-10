@@ -13,6 +13,7 @@ import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { EnvConfig } from './config.js';
+import { PUBLIC_API_PATHS } from './public-api.js';
 import {
   DEV_BASIC_AUTH_PASSWORD,
   DEV_BASIC_AUTH_USER,
@@ -175,6 +176,35 @@ export class WebStack extends cdk.Stack {
       originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
     };
 
+    // Public, user-independent reads (keep in sync with PUBLIC_API_PATHS in apps/bff/src/app.ts).
+    // Cached briefly at the edge so a flood of identical reads is absorbed by CloudFront
+    // instead of the Lambda, and so an origin 5xx or API Gateway throttle can fall back to the
+    // last good copy: the BFF sends `stale-if-error`, which CloudFront honors from the origin.
+    // Only query strings are in the key; cookies and auth headers are neither keyed nor
+    // forwarded, so one visitor's response can never depend on or leak to another's.
+    const publicApiCachePolicy = new cloudfront.CachePolicy(this, 'PublicApiCachePolicy', {
+      minTtl: cdk.Duration.seconds(0),
+      defaultTtl: cdk.Duration.seconds(0), // only cache what the BFF marks cacheable
+      maxTtl: cdk.Duration.minutes(5),
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.all(),
+      headerBehavior: cloudfront.CacheHeaderBehavior.none(),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+    });
+    const publicApiBehavior: cloudfront.BehaviorOptions = {
+      origin: apiOrigin,
+      viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+      allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+      cachePolicy: publicApiCachePolicy,
+      responseHeadersPolicy: noIndexPolicy,
+    };
+    const publicApiBehaviors: Record<string, cloudfront.BehaviorOptions> = {};
+    for (const name of PUBLIC_API_PATHS) {
+      publicApiBehaviors[`/api/${name}`] = publicApiBehavior;
+      publicApiBehaviors[`/api/${name}/*`] = publicApiBehavior;
+    }
+
     // The origin request policy above strips the viewer's Host header before
     // forwarding to API Gateway (required so it doesn't fight API Gateway's
     // own execute-api hostname). The sitemap needs the real public domain to
@@ -254,6 +284,7 @@ export class WebStack extends cdk.Stack {
         ],
       },
       additionalBehaviors: {
+        ...publicApiBehaviors,
         '/api/*': { origin: apiOrigin, ...apiBehavior, responseHeadersPolicy: noIndexPolicy },
         // Both dynamic (content differs per stage, robots.txt via env var;
         // sitemap enumerates live thing data) rather than static files, so
