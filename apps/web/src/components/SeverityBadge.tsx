@@ -1,18 +1,17 @@
 import type { Severity } from '@btfp/shared-types';
+import { Badge, type BadgeTone } from '@bubltec/uiux';
 
-const STYLES: Record<Severity, string> = {
-  severe: 'bg-alert-100 text-alert-600',
-  moderate: 'bg-paw-100 text-paw-600',
-  mild: 'bg-leaf-100 text-leaf-600',
-  unknown: 'bg-neutral-100 text-neutral-500',
+const TONE: Record<Severity, BadgeTone> = {
+  severe: 'danger',
+  moderate: 'warn',
+  mild: 'ok',
+  unknown: 'neutral',
 };
 
 export function SeverityBadge({ severity }: { severity: Severity }) {
   return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${STYLES[severity]}`}
-    >
+    <Badge tone={TONE[severity]} className="capitalize">
       {severity}
-    </span>
+    </Badge>
   );
 }

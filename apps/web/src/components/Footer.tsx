@@ -1,7 +1,9 @@
+import { AppFooter } from '@bubltec/uiux';
+
 export function Footer() {
   return (
-    <footer className="mt-16 border-t border-paw-200 bg-paw-50 py-8">
-      <div className="mx-auto max-w-5xl px-4 text-sm text-neutral-600">
+    <AppFooter>
+      <div className="w-full text-sm text-neutral-600">
         <p className="font-semibold text-alert-600">
           Not a substitute for veterinary care. If you suspect a poisoning, contact a vet
           immediately.
@@ -32,6 +34,6 @@ export function Footer() {
           </a>
         </p>
       </div>
-    </footer>
+    </AppFooter>
   );
 }

@@ -1,28 +1,23 @@
 @import 'tailwindcss';
+@import '@bubltec/uiux/themes/paw.css';
+@import '@bubltec/uiux/theme.css';
 
-@theme {
-  --color-paw-50: #fff7ed;
-  --color-paw-100: #ffedd5;
-  --color-paw-200: #fed7aa;
-  --color-paw-300: #fdba74;
-  --color-paw-400: #fb923c;
-  --color-paw-500: #f97316;
-  --color-paw-600: #ea580c;
-
-  --color-leaf-50: #f0fdf4;
-  --color-leaf-100: #dcfce7;
-  --color-leaf-400: #4ade80;
-  --color-leaf-600: #16a34a;
-
-  --color-alert-50: #fef2f2;
-  --color-alert-100: #fee2e2;
-  --color-alert-500: #ef4444;
-  --color-alert-600: #dc2626;
-
-  --font-sans: 'Nunito', ui-rounded, 'Segoe UI', system-ui, sans-serif;
-  --radius-cozy: 1.25rem;
-}
-
-body {
-  font-family: var(--font-sans);
+@theme inline {
+  --color-paw-50: var(--paw-50);
+  --color-paw-100: var(--paw-100);
+  --color-paw-200: var(--paw-200);
+  --color-paw-300: var(--paw-300);
+  --color-paw-400: var(--paw-400);
+  --color-paw-500: var(--paw-500);
+  --color-paw-600: var(--paw-600);
+  --color-leaf-50: var(--leaf-50);
+  --color-leaf-100: var(--leaf-100);
+  --color-leaf-400: var(--leaf-400);
+  --color-leaf-600: var(--leaf-600);
+  --color-alert-50: var(--alert-50);
+  --color-alert-100: var(--alert-100);
+  --color-alert-500: var(--alert-500);
+  --color-alert-600: var(--alert-600);
+  --font-sans: var(--font-body);
+  --radius-cozy: var(--radius);
 }
