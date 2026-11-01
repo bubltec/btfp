@@ -212,6 +212,9 @@ importers:
       '@btfp/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      '@bubltec/uiux':
+        specifier: 0.0.1
+        version: 0.0.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       react:
         specifier: 19.3.0
         version: 19.3.0
@@ -558,6 +561,13 @@ packages:
       '@nestjs/common': ^12.0.0
       class-transformer: ^0.5.1
       class-validator: ^0.15.0
+
+  '@bubltec/uiux@0.0.1':
+    resolution: {integrity: sha512-fZNmsnu1FatpCHE4Vhk5x2HFOeFFv5/+H+61rB4AbynFF8dnF9XIDuTyKto7gMUKwr+Z6ewuZ1zOQVq9t7DXSg==}
+    engines: {node: '>=26'}
+    peerDependencies:
+      react: ^19
+      react-dom: ^19
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -3083,6 +3093,11 @@ snapshots:
       - passport
       - reflect-metadata
       - rxjs
+
+  '@bubltec/uiux@0.0.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true

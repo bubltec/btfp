@@ -6,7 +6,7 @@ export function ThingCard({ thing }: { thing: Thing }) {
   return (
     <Link
       to={`/things/${thing.id}/${slugify(thing.name)}`}
-      className="block rounded-cozy border border-paw-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      className="panel card block p-4 no-underline shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-bold text-neutral-800">{thing.name}</h3>
